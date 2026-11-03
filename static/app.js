@@ -1055,11 +1055,12 @@ function CodeEditorView({ currentUser, theme, showToast }) {
             </button>
             <button
               onClick={() => setActiveBottomTab("stdin")}
-              className={`px-2 py-0.5 rounded text-xs font-mono ${
+              className={`px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1.5 ${
                 activeBottomTab === "stdin" ? "bg-zinc-800 text-white" : "text-zinc-400"
               }`}
             >
-              STDIN
+              <span>STDIN</span>
+              {stdin && stdin.trim() ? <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block"></span> : null}
             </button>
           </div>
 
@@ -1105,7 +1106,7 @@ function CodeEditorView({ currentUser, theme, showToast }) {
             <textarea
               value={stdin}
               onChange={(e) => setStdin(e.target.value)}
-              placeholder="Standard input passed to program..."
+              placeholder="Enter program input here (e.g. 10 20 for scanf or input)... Passed automatically when clicking Run."
               rows={3}
               className="w-full bg-transparent text-zinc-200 font-mono text-xs focus:outline-none"
             />
