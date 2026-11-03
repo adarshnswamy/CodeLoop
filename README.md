@@ -37,7 +37,7 @@
    Or on Windows, double-click `run_codeloop.bat`.
 
 3. **Open browser:**
-   Navigate to [http://localhost:8000](http://localhost:8000).
+   Navigate to https://code-loop-green.vercel.app
 
 ---
 
