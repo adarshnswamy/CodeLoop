@@ -156,24 +156,48 @@ class PedagogicalEngine:
 
     @staticmethod
     def answer_tutor_query(query: str, mode: str, skill_level: str, api_key: Optional[str] = None) -> str:
-        sys_prompt = f"""You are an expert AI Tutor, programming mentor, and academic learning assistant teaching a {skill_level} student.
-Your primary responsibility is to help students understand concepts naturally, just like an experienced human teacher.
+        clean_q = re.sub(r'[^\w\s]', '', query.lower()).strip()
 
-Style and Communication Rules:
-1. Always communicate in simple, natural, conversational, human-readable language as if teaching a beginner.
-2. Avoid robotic, overly formal, or machine-generated-sounding responses.
-3. Avoid excessive markdown: do not use unnecessary headings (###), horizontal lines, decorative blockquotes, or symbols.
-4. Do not use emojis or decorative icons.
-5. Use bullet points (pointers) whenever listing items, steps, components, or related points.
-6. Use numbered lists only when presenting chronological sequential steps.
-7. Use bold only when highlighting an important technical term.
-8. When explaining concepts, provide a simple explanation first, then properly formatted code blocks with language identifiers, and explain key lines.
-9. Follow this response structure when appropriate:
-- Start with a direct answer.
-- Explain the concept in simple language.
-- Provide a practical real-world example or code snippet.
-- Finish with a short takeaway.
-10. Ensure educational clarity and natural flow."""
+        # 1. Friendly greetings & pleasantries
+        greetings = {
+            'hi', 'hello', 'hey', 'hey there', 'hi there', 'hello there',
+            'good morning', 'good afternoon', 'good evening', 'greetings',
+            'yo', 'howdy', 'hi tutor', 'hello tutor', 'hey tutor', 'sup'
+        }
+        if clean_q in greetings or clean_q.startswith(('hi ', 'hello ', 'hey ', 'good morning ', 'good afternoon ', 'good evening ')):
+            return """Hello! Great to meet you. I am your personal programming tutor on CodeLoop, and I am excited to help you learn to code.
+
+What would you like to explore today? We can:
+- Learn a core concept (like loops, functions, lists, or if-else conditions)
+- Write or debug code together in Python, C, C++, Java, or JavaScript
+- Walk through a practice problem step by step
+
+Tell me what topic or language you want to start with!"""
+
+        if "how are you" in clean_q or "how r u" in clean_q:
+            return "I am doing great and excited to code with you! How is your learning going today? What topic or language would you like to practice?"
+
+        if "who are you" in clean_q or "what can you do" in clean_q or "what is your name" in clean_q:
+            return """I am your personal AI programming mentor on CodeLoop. My goal is to help you understand concepts naturally, write clean code, and build your confidence as a developer.
+
+Feel free to ask me any programming question, share your code for explanation or debugging, or ask for beginner-friendly exercises!"""
+
+        if "thank" in clean_q or "thx" in clean_q:
+            return "You are very welcome! Keep up the great coding practice. Let me know whenever you want to try another problem or concept."
+
+        sys_prompt = f"""You are a friendly, encouraging personal AI programming mentor and tutor teaching a {skill_level} student on CodeLoop.
+
+STYLE & COMMUNICATION RULES:
+1. Always communicate in simple, warm, natural, human-readable language as if you are a supportive teacher sitting right beside the student.
+2. If the student greets you (e.g. 'hi', 'hello', 'hey', 'good morning'), respond with a short, friendly greeting welcoming them and asking what programming topic or language they would like to work on today. Keep it short (2-3 sentences), warm, and encouraging. Never lecture on the word 'hi'.
+3. Be encouraging and help the student look forward to learning programming.
+4. Avoid robotic, overly formal, or machine-generated-sounding responses.
+5. Avoid excessive markdown: do not use unnecessary headings (###), horizontal rules, decorative blockquotes, or symbols.
+6. Do not use decorative emojis.
+7. Use bullet points (pointers) whenever presenting multiple items, options, steps, or components.
+8. Use bold only when highlighting an important technical keyword.
+9. When explaining programming concepts, start with a simple direct answer, provide an intuitive real-world analogy, then a clear concise code example, and explain key lines.
+10. Finish concept explanations with a short encouraging takeaway."""
 
         if mode == "explain":
             sys_prompt += "\nMode: Explain mode. Focus on clear concept explanations with bullet pointers."
@@ -213,7 +237,7 @@ Step 3
 
 Takeaway: Use a loop whenever you catch yourself writing repetitive code statements."""
 
-        elif "function" in q_lower or "method" in q_lower:
+        elif "function" in q_lower or "method" in q_lower or "def " in q_lower:
             return """A function is a named, reusable block of code that carries out a specific task whenever you call it.
 
 Think of it like a recipe on a card. You write down the instructions once, name it, and whenever you want that dish, you follow the recipe by name rather than rewriting the instructions every time.
@@ -268,15 +292,60 @@ Key points about lists:
 
 Takeaway: Use lists whenever you have a group of related items that belong together in a sequence."""
 
+        elif "variable" in q_lower or "data type" in q_lower:
+            return """A variable is a labeled container in your computer's memory used to hold information you want to use later.
+
+Think of it like a labeled cardboard box. If you label a box "shoes", you can put sneakers in it, check what is inside, or replace them anytime.
+
+Here is how variables work in Python:
+
+```python
+student_name = "Alex"
+age = 18
+is_enrolled = True
+
+print(student_name, "is", age, "years old.")
+```
+
+Expected output:
+```text
+Alex is 18 years old.
+```
+
+Takeaway: Give variables clear, descriptive names so anyone reading your code understands what data it holds."""
+
+        elif "if" in q_lower or "else" in q_lower or "condition" in q_lower:
+            return """Conditionals let your program make decisions based on whether something is true or false.
+
+Think of it like checking the weather before leaving home: If it is raining, take an umbrella; otherwise, wear sunglasses.
+
+Here is an example in Python:
+
+```python
+score = 85
+
+if score >= 50:
+    print("Status: Passed!")
+else:
+    print("Status: Needs more practice.")
+```
+
+Expected output:
+```text
+Status: Passed!
+```
+
+Takeaway: Use if-else statements whenever your program needs to choose between different actions."""
+
         else:
-            return f"""Here is a straightforward way to approach {query}:
+            return f"""Let's break down {query} step by step:
 
-Programming problems generally break down into three simple steps:
-- Input: What data your code receives.
-- Processing: What calculation or transformation needs to happen.
-- Output: What result you want to display or return.
+To understand this effectively, remember three core principles:
+- Define the goal: Be clear on what output you want before writing any syntax.
+- Break it into pieces: Divide the problem into input, logic processing, and output.
+- Experiment with simple examples: Run basic test values to see the result step by step.
 
-Takeaway: Before writing code, write out the steps in plain sentences first."""
+Would you like to see a practical code example in Python, C, C++, or Java? Let me know which language you prefer!"""
 
     @staticmethod
     def generate_quiz(topic: str, language: str, difficulty: str, api_key: Optional[str] = None) -> List[Dict[str, Any]]:

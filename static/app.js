@@ -548,7 +548,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: `CodeLoop Tutor initialized for user ${currentUser.name} (${currentUser.experience_level || "Beginner"}). Select a mode or enter a technical question below.`,
+      content: `Hello ${currentUser.name || "there"}! I am your personal AI programming tutor. How can I help you today? Ask any coding question, explore concepts like loops or functions, or share your code to debug together.`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -1039,29 +1039,16 @@ function CodeEditorView({ currentUser, theme, showToast }) {
         )}
       </div>
 
-      {/* Terminal Output */}
+      {/* Unified Terminal & Output Console */}
       <div className={`rounded-lg border overflow-hidden ${
         theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
       }`}>
         <div className="px-3 py-1.5 border-b border-[#27272a] flex items-center justify-between bg-[#141417]">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setActiveBottomTab("output")}
-              className={`px-2 py-0.5 rounded text-xs font-mono ${
-                activeBottomTab === "output" ? "bg-zinc-800 text-white" : "text-zinc-400"
-              }`}
-            >
-              Output
-            </button>
-            <button
-              onClick={() => setActiveBottomTab("stdin")}
-              className={`px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1.5 ${
-                activeBottomTab === "stdin" ? "bg-zinc-800 text-white" : "text-zinc-400"
-              }`}
-            >
-              <span>STDIN</span>
-              {stdin && stdin.trim() ? <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block"></span> : null}
-            </button>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>Terminal & Console</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1073,44 +1060,48 @@ function CodeEditorView({ currentUser, theme, showToast }) {
               </span>
             )}
             <button
-              onClick={() => setOutput(null)}
+              onClick={() => { setOutput(null); setStdin(""); }}
               className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300"
+              title="Clear input and console output"
             >
               Clear
             </button>
           </div>
         </div>
 
-        <div className="p-3 font-mono text-xs min-h-[120px] bg-[#09090b]">
-          {activeBottomTab === "output" ? (
-            <div>
-              {output ? (
-                <div className="space-y-2">
-                  {output.stdout && (
-                    <pre className="text-zinc-200 whitespace-pre-wrap">{output.stdout}</pre>
-                  )}
-                  {output.stderr && (
-                    <pre className="text-red-400 whitespace-pre-wrap">{output.stderr}</pre>
-                  )}
-                  {output.tip && (
-                    <div className="p-2 border border-zinc-800 bg-zinc-900/50 text-zinc-300 text-xs">
-                      {output.tip}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-zinc-600">Console ready. Click Run to execute.</p>
-              )}
-            </div>
-          ) : (
-            <textarea
+        <div className="p-3 font-mono text-xs min-h-[140px] bg-[#09090b] flex flex-col gap-2.5">
+          {/* Integrated Input Slot (Always visible, single unified slot) */}
+          <div className="flex items-center gap-2 pb-2.5 border-b border-[#27272a]/70">
+            <span className="text-zinc-400 font-mono text-xs select-none whitespace-nowrap">Input:</span>
+            <input
+              type="text"
               value={stdin}
               onChange={(e) => setStdin(e.target.value)}
-              placeholder="Enter program input here (e.g. 10 20 for scanf or input)... Passed automatically when clicking Run."
-              rows={3}
-              className="w-full bg-transparent text-zinc-200 font-mono text-xs focus:outline-none"
+              placeholder="Type program input here (e.g. 10 20 for scanf or input)... passed automatically on Run"
+              className="flex-1 bg-[#141417] border border-[#27272a] rounded px-2.5 py-1 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
             />
-          )}
+          </div>
+
+          {/* Integrated Output Slot */}
+          <div className="flex-1 overflow-y-auto">
+            {output ? (
+              <div className="space-y-2">
+                {output.stdout && (
+                  <pre className="text-zinc-200 whitespace-pre-wrap">{output.stdout}</pre>
+                )}
+                {output.stderr && (
+                  <pre className="text-red-400 whitespace-pre-wrap">{output.stderr}</pre>
+                )}
+                {output.tip && (
+                  <div className="p-2 border border-zinc-800 bg-zinc-900/60 text-zinc-300 text-xs rounded">
+                    {output.tip}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-zinc-600">Console ready. Click Run to execute.</p>
+            )}
+          </div>
         </div>
       </div>
 
