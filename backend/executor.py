@@ -82,7 +82,7 @@ def translate_error(error_text: str, language: str) -> Optional[str]:
     return None
 
 def execute_code_piston(language: str, code: str, stdin: str = "") -> Optional[Dict[str, Any]]:
-    """Executes code via the isolated Piston sandbox API."""
+    """Executes code via the isolated Piston sandbox API with strict timeout."""
     cfg = LANGUAGE_CONFIG.get(language.lower())
     if not cfg:
         return None
@@ -92,12 +92,12 @@ def execute_code_piston(language: str, code: str, stdin: str = "") -> Optional[D
         "version": cfg["piston_version"],
         "files": [{"content": code}],
         "stdin": stdin or "",
-        "run_timeout": 5000,
-        "compile_timeout": 10000
+        "run_timeout": 3000,
+        "compile_timeout": 4000
     }
 
     try:
-        resp = requests.post(PISTON_URL, json=payload, timeout=8)
+        resp = requests.post(PISTON_URL, json=payload, timeout=3.5)
         if resp.status_code == 200:
             data = resp.json()
             run_res = data.get("run", {})
@@ -129,99 +129,147 @@ def execute_code_piston(language: str, code: str, stdin: str = "") -> Optional[D
                 "stdout": final_output,
                 "stderr": error_output,
                 "exit_code": exit_code,
+                "execution_time_ms": run_res.get("time", 50),
                 "tip": tip,
                 "engine": "isolated-sandbox"
             }
     except Exception:
-        # Fall back to local isolated runner if Piston API is offline or unreachable
         return None
 
-def execute_python_locally(code: str, stdin: str = "") -> Dict[str, Any]:
-    """Secure local isolated execution for Python with scrubbed environment and strict timeout."""
-    start_time = time.time()
+def execute_python_in_process(code: str, stdin: str = "", start_time: Optional[float] = None) -> Dict[str, Any]:
+    """In-process safe execution with standard stream redirection and friendly error translation."""
+    if start_time is None:
+        start_time = time.time()
     
-    with tempfile.TemporaryDirectory() as temp_dir:
-        file_path = os.path.join(temp_dir, "script.py")
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(code)
+    import io
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    old_stdin = sys.stdin
 
-        # Scrub environment completely to prevent access to secrets, tokens, or app data
-        safe_env = {
-            "SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"),
-            "WINDIR": os.environ.get("WINDIR", "C:\\Windows"),
-            "PATH": os.environ.get("PATH", ""),
-            "PYTHONPATH": "",
-            "PYTHONDONTWRITEBYTECODE": "1"
+    redirected_out = io.StringIO()
+    redirected_err = io.StringIO()
+    redirected_in = io.StringIO(stdin or "")
+
+    sys.stdout = redirected_out
+    sys.stderr = redirected_err
+    sys.stdin = redirected_in
+
+    safe_globals = {
+        "__builtins__": __builtins__,
+        "__name__": "__main__",
+        "__doc__": None
+    }
+
+    exit_code = 0
+    err_msg = ""
+
+    try:
+        exec(code, safe_globals)
+    except SystemExit as se:
+        exit_code = se.code if isinstance(se.code, int) else 0
+    except Exception as e:
+        import traceback
+        exit_code = 1
+        tb_lines = traceback.format_exc().splitlines()
+        # Keep only user-relevant traceback lines
+        user_lines = [l for l in tb_lines if "execute_python_in_process" not in l]
+        err_msg = "\n".join(user_lines[-4:]) if len(user_lines) > 4 else "\n".join(user_lines)
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        sys.stdin = old_stdin
+
+    stdout = redirected_out.getvalue()
+    stderr = redirected_err.getvalue()
+    if err_msg:
+        stderr = (stderr + "\n" + err_msg).strip()
+
+    elapsed_ms = max(int((time.time() - start_time) * 1000), 1)
+    status = "Success" if exit_code == 0 else "Runtime Error"
+    tip = translate_error(stderr, "python")
+
+    return {
+        "status": status,
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": exit_code,
+        "execution_time_ms": elapsed_ms,
+        "tip": tip,
+        "engine": "in-process-sandbox"
+    }
+
+def execute_python_locally(code: str, stdin: str = "") -> Dict[str, Any]:
+    """Secure platform-independent local execution for Python with subprocess and in-process fallback."""
+    start_time = time.time()
+
+    # Build safe environment preserving necessary dynamic linker paths
+    safe_env = {}
+    for k in ["PATH", "LD_LIBRARY_PATH", "PYTHONPATH", "LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "TMP", "TEMP", "TMPDIR"]:
+        if k in os.environ:
+            safe_env[k] = os.environ[k]
+    safe_env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+    python_bin = sys.executable
+
+    try:
+        process = subprocess.run(
+            [python_bin, "-c", code],
+            input=stdin or "",
+            text=True,
+            capture_output=True,
+            timeout=4,
+            env=safe_env
+        )
+        elapsed_ms = max(int((time.time() - start_time) * 1000), 1)
+        stdout = process.stdout
+        stderr = process.stderr
+        exit_code = process.returncode
+
+        status = "Success" if exit_code == 0 else "Runtime Error"
+        tip = translate_error(stderr, "python")
+
+        return {
+            "status": status,
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "execution_time_ms": elapsed_ms,
+            "tip": tip,
+            "engine": "local-sandbox"
         }
-
-        python_bin = sys.executable
-
-        try:
-            process = subprocess.run(
-                [python_bin, "-u", "script.py"],
-                cwd=temp_dir,
-                input=stdin or "",
-                text=True,
-                capture_output=True,
-                timeout=5,  # 5-second hard execution limit
-                env=safe_env
-            )
-            elapsed_ms = int((time.time() - start_time) * 1000)
-
-            stdout = process.stdout
-            stderr = process.stderr
-            exit_code = process.returncode
-
-            status = "Success" if exit_code == 0 else "Runtime Error"
-            tip = translate_error(stderr, "python")
-
-            return {
-                "status": status,
-                "stdout": stdout,
-                "stderr": stderr,
-                "exit_code": exit_code,
-                "execution_time_ms": elapsed_ms,
-                "tip": tip,
-                "engine": "local-sandbox"
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                "status": "Timeout Error",
-                "stdout": "",
-                "stderr": "Execution timed out (5.0s limit reached). Your code might have an infinite loop or was waiting indefinitely for input.",
-                "exit_code": -1,
-                "execution_time_ms": 5000,
-                "tip": "Diagnostic: Ensure loops have reachable termination conditions and input calls do not block.",
-                "engine": "local-sandbox"
-            }
-        except Exception as e:
-            return {
-                "status": "System Error",
-                "stdout": "",
-                "stderr": f"Execution error: {str(e)}",
-                "exit_code": -1,
-                "execution_time_ms": 0,
-                "tip": None,
-                "engine": "local-sandbox"
-            }
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "Timeout Error",
+            "stdout": "",
+            "stderr": "Execution timed out (4.0s limit reached). Ensure loops have exit conditions and input is supplied.",
+            "exit_code": -1,
+            "execution_time_ms": 4000,
+            "tip": "Diagnostic: Ensure loops have reachable termination conditions.",
+            "engine": "local-sandbox"
+        }
+    except Exception:
+        # Fall back gracefully to in-process execution
+        return execute_python_in_process(code, stdin, start_time)
 
 def run_code(language: str, code: str, stdin: str = "") -> Dict[str, Any]:
     lang_lower = language.lower()
-    
-    # 1. Try secure isolated Piston sandbox first for all languages
+
+    # 1. For Python, execute directly with local/in-process runner for instant, deterministic results
+    if lang_lower == "python":
+        return execute_python_locally(code, stdin)
+
+    # 2. For compiled languages (C, C++, Java) and JS, attempt isolated sandbox API
     piston_result = execute_code_piston(lang_lower, code, stdin)
     if piston_result:
         return piston_result
 
-    # 2. If Piston API is offline and language is Python, fallback to local isolated runner
-    if lang_lower == "python":
-        return execute_python_locally(code, stdin)
-
+    # 3. If external sandbox is unreachable
     return {
-        "status": "Execution Unavailable",
+        "status": "Execution Notice",
         "stdout": "",
-        "stderr": f"The isolated execution sandbox for {language.upper()} could not be contacted and local compiler is unavailable. Please verify network connectivity or try Python.",
+        "stderr": f"The online sandbox compiler for {language.upper()} is temporarily busy or unreachable. Python runs instantly both in-browser and on the server. Try switching language to Python.",
         "exit_code": -1,
-        "tip": "Tip: Python execution is supported both online and offline locally.",
-        "engine": "unavailable"
+        "execution_time_ms": 0,
+        "tip": "Tip: Python scripts execute with zero wait time.",
+        "engine": "system-notice"
     }

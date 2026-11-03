@@ -8,6 +8,34 @@ function getAuthHeader() {
   return token ? { "Authorization": `Bearer ${token}` } : {};
 }
 
+// Global Pyodide WASM instance for instant in-browser execution
+let pyodideReadyPromise = null;
+function getPyodideInstance() {
+  if (!pyodideReadyPromise) {
+    if (typeof loadPyodide !== "undefined") {
+      pyodideReadyPromise = loadPyodide({
+        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/"
+      }).catch(err => {
+        console.warn("Pyodide async load notice:", err);
+        return null;
+      });
+    } else {
+      pyodideReadyPromise = Promise.resolve(null);
+    }
+  }
+  return pyodideReadyPromise;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+      if (typeof loadPyodide !== "undefined") {
+        getPyodideInstance();
+      }
+    }, 1500);
+  });
+}
+
 async function apiRequest(endpoint, method = "GET", body = null) {
   const headers = {
     ...getAuthHeader(),
@@ -23,7 +51,11 @@ async function apiRequest(endpoint, method = "GET", body = null) {
   const res = await fetch(`${API_BASE}${endpoint}`, config);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.detail || data.message || "Request failed");
+    if (res.status === 401) {
+      throw new Error("Session expired or invalid. Please log in again.");
+    }
+    const msg = data.detail || data.message || `Server responded with status ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
   return data;
 }
@@ -721,6 +753,94 @@ function CodeEditorView({ currentUser, theme, showToast }) {
   const runCode = async () => {
     setIsExecuting(true);
     setActiveBottomTab("output");
+    const startTime = performance.now();
+
+    // 1. In-browser Python runner with Pyodide (instant zero-latency execution)
+    if (language === "python" && typeof loadPyodide !== "undefined") {
+      try {
+        const py = await getPyodideInstance();
+        if (py) {
+          let stdoutText = "";
+          let stderrText = "";
+          py.setStdout({ batched: (msg) => { stdoutText += (stdoutText ? "\n" : "") + msg; } });
+          py.setStderr({ batched: (msg) => { stderrText += (stderrText ? "\n" : "") + msg; } });
+
+          try {
+            await py.runPythonAsync(code);
+            const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
+            setOutput({
+              status: "Success",
+              stdout: stdoutText || (stderrText ? "" : "Program completed with no output."),
+              stderr: stderrText,
+              exit_code: 0,
+              execution_time_ms: elapsed,
+              engine: "in-browser-wasm"
+            });
+            // Background sync with learning history
+            apiRequest("/api/execute", "POST", { language, code, stdin }).catch(() => {});
+            setIsExecuting(false);
+            return;
+          } catch (pyErr) {
+            const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
+            setOutput({
+              status: "Runtime Error",
+              stdout: stdoutText,
+              stderr: pyErr.message || String(pyErr),
+              exit_code: 1,
+              execution_time_ms: elapsed,
+              tip: "Diagnostic: Check syntax and variable names in your Python script.",
+              engine: "in-browser-wasm"
+            });
+            setIsExecuting(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Pyodide execution skipped, falling back to server:", e);
+      }
+    }
+
+    // 2. In-browser JavaScript execution
+    if (language === "javascript") {
+      try {
+        let logs = [];
+        const customConsole = {
+          log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')),
+          warn: (...args) => logs.push("[warn] " + args.join(' ')),
+          error: (...args) => logs.push("[error] " + args.join(' ')),
+          info: (...args) => logs.push(args.join(' ')),
+        };
+        const runFn = new Function('console', code);
+        runFn(customConsole);
+        const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
+        setOutput({
+          status: "Success",
+          stdout: logs.join('\n') || "Program completed with no output.",
+          stderr: "",
+          exit_code: 0,
+          execution_time_ms: elapsed,
+          engine: "in-browser-js"
+        });
+        apiRequest("/api/execute", "POST", { language, code, stdin }).catch(() => {});
+        setIsExecuting(false);
+        return;
+      } catch (err) {
+        const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
+        setOutput({
+          status: "Runtime Error",
+          stdout: "",
+          stderr: err.toString(),
+          exit_code: 1,
+          execution_time_ms: elapsed,
+          tip: "Diagnostic: Check syntax and expressions in your JavaScript code.",
+          engine: "in-browser-js"
+        });
+        setIsExecuting(false);
+        return;
+      }
+    }
+
+    // 3. Server-side Execution via API
     try {
       const res = await apiRequest("/api/execute", "POST", {
         language,
@@ -733,7 +853,8 @@ function CodeEditorView({ currentUser, theme, showToast }) {
         status: "Error",
         stdout: "",
         stderr: err.message,
-        exit_code: -1
+        exit_code: -1,
+        execution_time_ms: Math.round(performance.now() - startTime)
       });
     } finally {
       setIsExecuting(false);

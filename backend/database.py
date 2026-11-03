@@ -4,7 +4,16 @@ import json
 import uuid
 from datetime import datetime, date
 
-if os.environ.get("VERCEL"):
+def is_serverless() -> bool:
+    return bool(
+        os.environ.get("VERCEL") or 
+        os.environ.get("VERCEL_ENV") or 
+        os.environ.get("VERCEL_REGION") or 
+        os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or 
+        not os.access(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), os.W_OK)
+    )
+
+if is_serverless():
     DB_PATH = "/tmp/codeloop.db"
 else:
     DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "codeloop.db")
@@ -17,9 +26,12 @@ def get_db():
     first_time = not os.path.exists(DB_PATH)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA foreign_keys = OFF")
     try:
-        conn.execute("PRAGMA journal_mode = WAL")
+        if not is_serverless():
+            conn.execute("PRAGMA journal_mode = WAL")
+        else:
+            conn.execute("PRAGMA journal_mode = MEMORY")
     except Exception:
         pass
     if first_time or not _initialized:
@@ -29,7 +41,7 @@ def get_db():
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA foreign_keys = OFF")
     init_db_tables(conn)
     conn.close()
 

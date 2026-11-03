@@ -63,4 +63,32 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired session token. Please log in again."
         )
-    return payload["user_id"]
+    
+    user_id = payload["user_id"]
+    email = payload.get("email", "")
+
+    # Ensure user record exists in current serverless/local SQLite instance
+    try:
+        from database import get_db
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+        if not cursor.fetchone():
+            from datetime import datetime, date
+            now_iso = datetime.now().isoformat()
+            student_name = email.split("@")[0].replace(".", " ").title() if email else "Student"
+            cursor.execute("""
+            INSERT OR IGNORE INTO users (id, name, email, password_hash, salt, experience_level, preferred_languages, learning_goals, created_at)
+            VALUES (?, ?, ?, '', '', 'Beginner', '["Python"]', 'Master programming concepts', ?)
+            """, (user_id, student_name, email.lower(), now_iso))
+
+            cursor.execute("""
+            INSERT OR IGNORE INTO learning_progress (user_id, completed_topics, problems_solved, accuracy, learning_streak, last_streak_date, weak_topics, daily_goal_target, daily_goal_completed, last_active_date)
+            VALUES (?, '[]', 0, 0.0, 1, ?, '[]', 3, 0, ?)
+            """, (user_id, date.today().isoformat(), now_iso))
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    return user_id

@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from database import init_db, get_db
+from database import init_db, get_db, is_serverless
 from security import (
     hash_password,
     verify_password,
@@ -29,6 +29,13 @@ from ai_engine import PedagogicalEngine, call_gemini_api
 
 app = FastAPI(title="CODELOOP API", version="1.0.0")
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Server error: {str(exc)}", "error_type": type(exc).__name__}
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,17 +45,27 @@ app.add_middleware(
 )
 
 # Initialize Database
-init_db()
+try:
+    init_db()
+except Exception as e:
+    print(f"Database init warning: {e}")
 
 # Directory for uploaded study materials
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if os.environ.get("VERCEL"):
+if is_serverless():
     UPLOAD_DIR = "/tmp/uploads"
 else:
     UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(STATIC_DIR, exist_ok=True)
+
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+except Exception:
+    pass
+try:
+    os.makedirs(STATIC_DIR, exist_ok=True)
+except Exception:
+    pass
 
 # ----------------- PYDANTIC SCHEMAS -----------------
 class RegisterRequest(BaseModel):
@@ -146,63 +163,64 @@ def register(req: RegisterRequest):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM users WHERE email = ?", (req.email.lower(),))
-    if cursor.fetchone():
+    try:
+        cursor.execute("SELECT id FROM users WHERE email = ?", (req.email.lower(),))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="An account with this email address already exists.")
+
+        user_id = str(uuid.uuid4())
+        pwd_hash, salt = hash_password(req.password)
+        now_iso = datetime.now().isoformat()
+
+        cursor.execute("""
+        INSERT INTO users (id, name, email, password_hash, salt, experience_level, preferred_languages, learning_goals, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id,
+            req.name.strip(),
+            req.email.lower(),
+            pwd_hash,
+            salt,
+            req.experience_level,
+            json.dumps(req.preferred_languages),
+            req.learning_goals,
+            now_iso
+        ))
+
+        # Initialize learning progress
+        cursor.execute("""
+        INSERT INTO learning_progress (user_id, completed_topics, problems_solved, accuracy, learning_streak, last_streak_date, weak_topics, daily_goal_target, daily_goal_completed, last_active_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id,
+            json.dumps([]),
+            0,
+            0.0,
+            1,
+            date.today().isoformat(),
+            json.dumps([]),
+            3,
+            0,
+            now_iso
+        ))
+
+        # Create a welcome starter program
+        cursor.execute("""
+        INSERT INTO programs (id, user_id, title, language, code, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()),
+            user_id,
+            "Starter Program",
+            "python",
+            "# CodeLoop Starter Script\n\ndef main():\n    print('Environment initialized successfully.')\n\nif __name__ == '__main__':\n    main()\n",
+            now_iso,
+            now_iso
+        ))
+
+        conn.commit()
+    finally:
         conn.close()
-        raise HTTPException(status_code=400, detail="An account with this email address already exists.")
-
-    user_id = str(uuid.uuid4())
-    pwd_hash, salt = hash_password(req.password)
-    now_iso = datetime.now().isoformat()
-
-    cursor.execute("""
-    INSERT INTO users (id, name, email, password_hash, salt, experience_level, preferred_languages, learning_goals, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        user_id,
-        req.name.strip(),
-        req.email.lower(),
-        pwd_hash,
-        salt,
-        req.experience_level,
-        json.dumps(req.preferred_languages),
-        req.learning_goals,
-        now_iso
-    ))
-
-    # Initialize learning progress
-    cursor.execute("""
-    INSERT INTO learning_progress (user_id, completed_topics, problems_solved, accuracy, learning_streak, last_streak_date, weak_topics, daily_goal_target, daily_goal_completed, last_active_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        user_id,
-        json.dumps([]),
-        0,
-        0.0,
-        1,
-        date.today().isoformat(),
-        json.dumps([]),
-        3,
-        0,
-        now_iso
-    ))
-
-    # Create a welcome starter program
-    cursor.execute("""
-    INSERT INTO programs (id, user_id, title, language, code, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        str(uuid.uuid4()),
-        user_id,
-        "Starter Program",
-        "python",
-        "# CodeLoop Starter Script\n\ndef main():\n    print('Environment initialized successfully.')\n\nif __name__ == '__main__':\n    main()\n",
-        now_iso,
-        now_iso
-    ))
-
-    conn.commit()
-    conn.close()
 
     token = create_session_token(user_id, req.email.lower())
     return {
@@ -426,27 +444,41 @@ def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
 # ----------------- CODE EXECUTION & PROGRAMS -----------------
 @app.post("/api/execute")
 def execute_code(req: ExecuteRequest, user_id: str = Depends(get_current_user_id)):
-    result = run_code(req.language, req.code, req.stdin or "")
+    try:
+        result = run_code(req.language, req.code, req.stdin or "")
+    except Exception as e:
+        result = {
+            "status": "Error",
+            "stdout": "",
+            "stderr": f"Execution error: {str(e)}",
+            "exit_code": -1,
+            "execution_time_ms": 0,
+            "tip": None,
+            "engine": "fallback"
+        }
 
-    # Save to coding history
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-    INSERT INTO coding_history (id, user_id, program_id, language, code, status, output, execution_time_ms, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        str(uuid.uuid4()),
-        user_id,
-        req.program_id,
-        req.language,
-        req.code,
-        result["status"],
-        result["stdout"] or result["stderr"],
-        result.get("execution_time_ms", 0),
-        datetime.now().isoformat()
-    ))
-    conn.commit()
-    conn.close()
+    # Save to coding history safely (never fail response if logging fails)
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO coding_history (id, user_id, program_id, language, code, status, output, execution_time_ms, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()),
+            user_id,
+            req.program_id,
+            req.language,
+            req.code,
+            result.get("status", "Success"),
+            result.get("stdout", "") or result.get("stderr", ""),
+            result.get("execution_time_ms", 0),
+            datetime.now().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        pass
 
     return result
 
