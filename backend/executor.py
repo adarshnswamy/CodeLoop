@@ -73,6 +73,8 @@ def translate_error(error_text: str, language: str) -> Optional[str]:
         return "Diagnostic: Index out of bounds. The requested index does not exist in the collection. Note that indexing begins at 0."
     elif "zerodivisionerror" in lower:
         return "Diagnostic: Division by zero. Verify that the denominator is guarded against zero before division."
+    elif "eoferror" in lower or "errno 29" in lower:
+        return "Tip: The program requested input via input(), but reached the end of input. Provide input values in STDIN before clicking Run."
     elif "timed out" in lower or "execution timeout" in lower:
         return "Diagnostic: Execution timeout. The execution exceeded the maximum allotted time. Verify loop termination conditions."
 

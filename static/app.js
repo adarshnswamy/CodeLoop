@@ -1970,6 +1970,35 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
           py.setStdout({ batched: (msg) => { stdoutText += (stdoutText ? "\n" : "") + msg; } });
           py.setStderr({ batched: (msg) => { stderrText += (stderrText ? "\n" : "") + msg; } });
 
+          // Support interactive & buffered STDIN input for input() calls
+          let stdinQueue = (stdin && stdin.trim()) ? stdin.split(/\r?\n/) : [];
+          let stdinIdx = 0;
+
+          if (typeof py.setStdin === "function") {
+            py.setStdin({
+              stdin: () => {
+                // Pre-filled inputs from the STDIN field
+                if (stdinIdx < stdinQueue.length) {
+                  const val = stdinQueue[stdinIdx++];
+                  stdoutText += (stdoutText ? "\n" : "") + val;
+                  return val + "\n";
+                }
+
+                // Interactive browser prompt for interactive code like chatbots
+                if (typeof window !== "undefined" && window.prompt) {
+                  const recentPrompt = stdoutText.split("\n").filter(Boolean).slice(-2).join("\n") || "Input required";
+                  const inputVal = window.prompt(`Program requests input:\n${recentPrompt}\n\n(Enter your response, or click Cancel to finish):`);
+                  if (inputVal !== null) {
+                    stdoutText += (stdoutText ? "\n" : "") + inputVal;
+                    return inputVal + "\n";
+                  }
+                }
+
+                return null; // EOF
+              }
+            });
+          }
+
           try {
             await py.runPythonAsync(code);
             const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
@@ -1986,13 +2015,48 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
             return;
           } catch (pyErr) {
             const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
+            const errStr = pyErr.toString();
+            const isInputEnded = errStr.includes("EOFError") || errStr.includes("Errno 29") || errStr.includes("I/O error");
+
+            if (isInputEnded) {
+              setOutput({
+                status: stdoutText ? "Completed" : "Success",
+                stdout: stdoutText ? (stdoutText + "\n\n[Program finished: End of user input]") : "Program completed with no input.",
+                stderr: "",
+                exit_code: 0,
+                execution_time_ms: elapsed,
+                tip: "Tip: Program finished when user input was completed. You can provide inputs interactively or pre-fill them in STDIN.",
+                engine: "pyodide-wasm"
+              });
+              apiRequest("/api/execute", "POST", { language, code, stdin }).catch(() => {});
+              setIsExecuting(false);
+              return;
+            }
+
+            // Specific educational diagnostic
+            let friendlyTip = "Diagnostic: Check your syntax, indentation, and variable bindings.";
+            const lowerErr = errStr.toLowerCase();
+            if (lowerErr.includes("indentationerror")) {
+              friendlyTip = "Diagnostic: Indentation error. Ensure consistent 4-space indentation across all code blocks.";
+            } else if (lowerErr.includes("syntaxerror")) {
+              friendlyTip = "Diagnostic: Syntax error. Check for missing colons (:), unclosed quotes, brackets, or parentheses.";
+            } else if (lowerErr.includes("nameerror")) {
+              friendlyTip = "Diagnostic: Undefined variable or function. Make sure identifiers are spelled correctly and declared before use.";
+            } else if (lowerErr.includes("typeerror")) {
+              friendlyTip = "Diagnostic: Type mismatch. Incompatible types cannot be combined directly; convert with str(), int(), etc.";
+            } else if (lowerErr.includes("indexerror")) {
+              friendlyTip = "Diagnostic: List index out of range. Check list boundaries (remember indices start at 0).";
+            } else if (lowerErr.includes("zerodivisionerror")) {
+              friendlyTip = "Diagnostic: Division by zero. Ensure your divisor is guarded against zero.";
+            }
+
             setOutput({
               status: "Runtime Error",
               stdout: stdoutText,
-              stderr: pyErr.toString(),
+              stderr: errStr,
               exit_code: 1,
               execution_time_ms: elapsed,
-              tip: "Diagnostic: Check your syntax, indentation, and variable bindings.",
+              tip: friendlyTip,
               engine: "pyodide-wasm"
             });
             setIsExecuting(false);
@@ -2319,7 +2383,7 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
                 type="text"
                 value={stdin}
                 onChange={(e) => setStdin(e.target.value)}
-                placeholder="Type inputs passed to program (e.g. 10 20)..."
+                placeholder="Optional inputs for program (e.g. 10 20)... or enter interactively when prompted"
                 className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition"
               />
             </div>
