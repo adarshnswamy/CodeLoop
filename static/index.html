@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CodeLoop | Programming Workspace</title>
+  <title>CodeLoop | Professional AI Programming Workspace</title>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -17,6 +17,14 @@
             mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
           },
           colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              200: '#bfdbfe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            },
             app: {
               bg: '#09090b',
               surface: '#121215',
@@ -66,7 +74,7 @@
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js" defer></script>
 
   <style>
-    /* Sharp High-Contrast Scrollbars */
+    /* Clean High-Contrast Scrollbars */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -74,15 +82,58 @@
     ::-webkit-scrollbar-track {
       background: transparent;
     }
-    .dark ::-webkit-scrollbar-track {
-      background: transparent;
-    }
     ::-webkit-scrollbar-thumb {
-      background: #3f3f46;
+      background: #cbd5e1;
       border-radius: 3px;
     }
+    .dark ::-webkit-scrollbar-thumb {
+      background: #3f3f46;
+    }
     ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .dark ::-webkit-scrollbar-thumb:hover {
       background: #52525b;
+    }
+
+    /* Design System Tokens */
+    .theme-card {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      color: #0f172a;
+    }
+    .dark .theme-card {
+      background-color: #121215;
+      border: 1px solid #27272a;
+      color: #f4f4f5;
+    }
+
+    .theme-card-subtle {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #1e293b;
+    }
+    .dark .theme-card-subtle {
+      background-color: #18181b;
+      border: 1px solid #27272a;
+      color: #f4f4f5;
+    }
+
+    .theme-input {
+      background-color: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: #0f172a;
+    }
+    .dark .theme-input {
+      background-color: #18181b;
+      border: 1px solid #27272a;
+      color: #f4f4f5;
+    }
+    .theme-input::placeholder {
+      color: #94a3b8;
+    }
+    .dark .theme-input::placeholder {
+      color: #52525b;
     }
 
     /* Markdown High-Contrast Dark Styling */
@@ -263,7 +314,7 @@
     }
   </style>
 </head>
-<body class="bg-[#09090b] text-[#f4f4f5] font-sans antialiased min-h-screen">
+<body class="bg-[#f8fafc] text-[#0f172a] dark:bg-[#09090b] dark:text-[#f4f4f5] font-sans antialiased min-h-screen">
   <div id="root"></div>
 
   <!-- Monaco loader configuration -->

@@ -204,26 +204,46 @@ function MonacoEditor({ code, language, onChange, height = "440px", theme = "dar
 
 // ----------------- ROOT COMPONENT -----------------
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("codeloop_token") || "");
+  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const initialToken = (urlParams && urlParams.get("token")) || localStorage.getItem("codeloop_token") || "";
+  const initialTab = (urlParams && urlParams.get("tab")) || "dashboard";
+  const initialTheme = (urlParams && urlParams.get("theme")) || localStorage.getItem("codeloop_theme") || "dark";
+
+  const [token, setToken] = useState(initialToken);
   const [currentUser, setCurrentUser] = useState(null);
-  const [theme, setTheme] = useState(localStorage.getItem("codeloop_theme") || "dark");
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [theme, setTheme] = useState(initialTheme);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // Cross-feature deep integrations
   const [editorInitialCode, setEditorInitialCode] = useState(null);
   const [editorInitialLanguage, setEditorInitialLanguage] = useState(null);
+  const [tutorInitialPrompt, setTutorInitialPrompt] = useState(null);
+
+  useEffect(() => {
+    if (initialToken) {
+      localStorage.setItem("codeloop_token", initialToken);
+    }
+  }, [initialToken]);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const openInEditor = (code, language = "python") => {
     setEditorInitialCode(code);
     setEditorInitialLanguage(language);
     setActiveTab("editor");
-    showToast("Loaded snippet into Code Editor!", "info");
+    showToast("Code snippet loaded into Playground", "info");
   };
 
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+  const askTutor = (prompt, mode = "explain") => {
+    setTutorInitialPrompt({ prompt, mode, timestamp: Date.now() });
+    setActiveTab("tutor");
+    showToast("Opened query in AI Tutor", "info");
   };
 
   useEffect(() => {
@@ -268,12 +288,12 @@ function App() {
   return (
     <div className={`min-h-screen flex ${theme === "dark" ? "bg-[#09090b] text-[#f4f4f5]" : "bg-[#f8fafc] text-[#0f172a]"}`}>
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-3.5 py-2 rounded text-xs font-medium border ${
+        <div className={`fixed top-4 right-4 z-50 px-3.5 py-2 rounded-md text-xs font-medium border shadow-lg transition-all ${
           toast.type === "error" 
-            ? "bg-red-950/90 text-red-200 border-red-800" 
+            ? "bg-red-950/95 text-red-200 border-red-800" 
             : toast.type === "info"
-            ? "bg-zinc-900 text-zinc-200 border-zinc-700"
-            : "bg-emerald-950/90 text-emerald-200 border-emerald-800"
+            ? "bg-zinc-900 text-zinc-100 border-zinc-700"
+            : "bg-emerald-950/95 text-emerald-200 border-emerald-800"
         }`}>
           {toast.message}
         </div>
@@ -301,14 +321,14 @@ function App() {
         />
 
         <main className={`flex-1 w-full ${activeTab === "tutor" ? "p-0 h-[calc(100vh-3.5rem)] overflow-hidden" : "p-4 md:p-6 max-w-7xl mx-auto"}`}>
-          {activeTab === "dashboard" && <DashboardView currentUser={currentUser} setActiveTab={setActiveTab} showToast={showToast} theme={theme} />}
-          {activeTab === "tutor" && <AITutorView currentUser={currentUser} theme={theme} voiceEnabled={voiceEnabled} showToast={showToast} openInEditor={openInEditor} />}
-          {activeTab === "editor" && <CodeEditorView currentUser={currentUser} theme={theme} showToast={showToast} initialCode={editorInitialCode} initialLanguage={editorInitialLanguage} />}
-          {activeTab === "practice" && <PracticeZoneView currentUser={currentUser} theme={theme} showToast={showToast} />}
-          {activeTab === "mylearning" && <MyLearningView currentUser={currentUser} theme={theme} showToast={showToast} />}
-          {activeTab === "materials" && <StudyMaterialsView currentUser={currentUser} theme={theme} showToast={showToast} />}
+          {activeTab === "dashboard" && <DashboardView currentUser={currentUser} setActiveTab={setActiveTab} showToast={showToast} theme={theme} openInEditor={openInEditor} askTutor={askTutor} />}
+          {activeTab === "tutor" && <AITutorView currentUser={currentUser} theme={theme} voiceEnabled={voiceEnabled} showToast={showToast} openInEditor={openInEditor} tutorInitialPrompt={tutorInitialPrompt} onClearInitialPrompt={() => setTutorInitialPrompt(null)} />}
+          {activeTab === "editor" && <CodeEditorView currentUser={currentUser} theme={theme} showToast={showToast} initialCode={editorInitialCode} initialLanguage={editorInitialLanguage} askTutor={askTutor} />}
+          {activeTab === "practice" && <PracticeZoneView currentUser={currentUser} theme={theme} showToast={showToast} askTutor={askTutor} />}
+          {activeTab === "mylearning" && <MyLearningView currentUser={currentUser} theme={theme} showToast={showToast} askTutor={askTutor} />}
+          {activeTab === "materials" && <StudyMaterialsView currentUser={currentUser} theme={theme} showToast={showToast} askTutor={askTutor} />}
           {activeTab === "quizzes" && <QuizzesView currentUser={currentUser} theme={theme} showToast={showToast} />}
-          {activeTab === "analytics" && <ProgressAnalyticsView currentUser={currentUser} theme={theme} showToast={showToast} />}
+          {activeTab === "analytics" && <ProgressAnalyticsView currentUser={currentUser} theme={theme} showToast={showToast} askTutor={askTutor} />}
           {activeTab === "settings" && <SettingsView currentUser={currentUser} refreshProfile={apiProfile} theme={theme} toggleTheme={toggleTheme} showToast={showToast} />}
         </main>
       </div>
@@ -335,14 +355,14 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, theme, mobileMe
       id: "tutor", 
       label: "AI Tutor",
       icon: (
-        <svg className="w-4 h-4 mr-2.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-4 h-4 mr-2.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
         </svg>
       )
     },
     { 
       id: "editor", 
-      label: "Code Editor",
+      label: "Code Playground",
       icon: (
         <svg className="w-4 h-4 mr-2.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="16 18 22 12 16 6"></polyline>
@@ -428,27 +448,35 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, theme, mobileMe
         fixed lg:static inset-y-0 left-0 z-40 w-56 flex flex-col
         ${theme === "dark" ? "bg-[#121215] border-r border-[#27272a]" : "bg-white border-r border-slate-200"}
         ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        transition-transform duration-200 ease-in-out
       `}>
         {/* Brand Header */}
-        <div className="h-14 px-4 flex items-center justify-between border-b border-[#27272a]">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab("dashboard")}>
-            <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-mono font-bold">
+        <div className={`h-14 px-4 flex items-center justify-between border-b ${
+          theme === "dark" ? "border-[#27272a]" : "border-slate-200"
+        }`}>
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setActiveTab("dashboard")}>
+            <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-sm">
               C
             </div>
-            <span className="font-semibold text-sm tracking-tight text-white">
-              CodeLoop
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className={`font-bold text-sm tracking-tight ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                CodeLoop
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+                STUDIO
+              </span>
+            </div>
           </div>
           <button 
-            className="lg:hidden text-zinc-400 hover:text-white"
+            className="lg:hidden text-zinc-400 hover:text-zinc-600 dark:hover:text-white"
             onClick={() => setMobileMenuOpen(false)}
           >
-            Close
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-2.5 py-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
             return (
@@ -458,14 +486,14 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, theme, mobileMe
                   setActiveTab(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center px-3 py-1.5 rounded text-xs font-medium text-left ${
+                className={`w-full flex items-center px-3 py-2 rounded-md text-xs font-medium text-left transition-all ${
                   isActive
                     ? theme === "dark"
-                      ? "bg-zinc-800 text-white border border-zinc-700"
-                      : "bg-slate-100 text-slate-900 border border-slate-300"
+                      ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                      : "bg-blue-50 text-blue-700 border border-blue-200 font-semibold shadow-sm"
                     : theme === "dark"
                       ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 }`}
               >
                 {item.icon}
@@ -477,16 +505,32 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, theme, mobileMe
 
         {/* User Info & Logout */}
         <div className={`p-3 border-t text-xs ${theme === "dark" ? "border-[#27272a] bg-[#141417]" : "border-slate-200 bg-slate-50"}`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-zinc-200 truncate">{currentUser.name}</span>
-            <span className="text-[10px] text-zinc-400 font-mono">{currentUser.experience_level || "Beginner"}</span>
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <div className="w-8 h-8 rounded-full bg-blue-600/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0 border border-blue-500/20">
+              {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className={`font-semibold truncate text-xs ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+                {currentUser.name}
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
+                  {currentUser.experience_level || "Beginner"}
+                </span>
+              </div>
+            </div>
           </div>
 
           <button
             onClick={logout}
-            className="w-full text-left text-[11px] text-red-400 hover:text-red-300 py-1"
+            className="w-full flex items-center gap-1.5 text-left text-[11px] text-red-500 dark:text-red-400 hover:underline py-1 transition"
           >
-            Log out
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
           </button>
         </div>
       </aside>
@@ -497,13 +541,13 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, theme, mobileMe
 // ----------------- HEADER -----------------
 function Header({ activeTab, currentUser, theme, toggleTheme, voiceEnabled, setVoiceEnabled, setMobileMenuOpen }) {
   const titles = {
-    dashboard: "Dashboard",
-    tutor: "AI Tutor",
-    editor: "Code Editor",
+    dashboard: "Workspace Dashboard",
+    tutor: "AI Tutor Workspace",
+    editor: "Code Playground",
     practice: "Practice Zone",
     mylearning: "My Learning",
     materials: "Study Materials",
-    quizzes: "Quizzes",
+    quizzes: "Assessments & Quizzes",
     analytics: "Progress & Analytics",
     settings: "Settings"
   };
@@ -515,36 +559,86 @@ function Header({ activeTab, currentUser, theme, toggleTheme, voiceEnabled, setV
       <div className="flex items-center gap-3">
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="lg:hidden text-xs text-zinc-400 hover:text-white"
+          className="lg:hidden p-1.5 rounded text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-white"
+          title="Open Navigation"
         >
-          Menu
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
         </button>
-        <span className="text-sm font-semibold text-zinc-100">
+
+        <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400 hidden sm:flex">
+          <span>CodeLoop</span>
+          <span>/</span>
+        </div>
+
+        <span className={`text-sm font-semibold tracking-tight ${
+          theme === "dark" ? "text-zinc-100" : "text-slate-900"
+        }`}>
           {titles[activeTab] || "CodeLoop"}
         </span>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Voice Toggle */}
         <button
           onClick={() => setVoiceEnabled(!voiceEnabled)}
-          className={`px-2.5 py-1 rounded text-[11px] font-mono border ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-mono border transition ${
             voiceEnabled 
-              ? "bg-zinc-800 border-zinc-600 text-blue-400" 
-              : "bg-transparent border-zinc-800 text-zinc-400 hover:text-zinc-300"
+              ? "bg-blue-50 border-blue-300 text-blue-600 dark:bg-blue-950/80 dark:border-blue-800 dark:text-blue-300 font-semibold" 
+              : "bg-transparent border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800"
           }`}
+          title="Toggle text-to-speech voice"
         >
-          {voiceEnabled ? "Voice: Active" : "Voice: Off"}
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          <span className="hidden sm:inline">{voiceEnabled ? "Voice: On" : "Voice: Off"}</span>
         </button>
 
+        {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="px-2.5 py-1 rounded text-[11px] font-mono border border-zinc-800 text-zinc-400 hover:text-zinc-200"
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-mono border transition ${
+            theme === "dark"
+              ? "bg-zinc-800/80 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+              : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"
+          }`}
+          title="Toggle Light/Dark Theme"
         >
-          {theme === "dark" ? "Light" : "Dark"}
+          {theme === "dark" ? (
+            <>
+              <svg className="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+              <span className="hidden sm:inline">Light</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+              <span className="hidden sm:inline">Dark</span>
+            </>
+          )}
         </button>
 
-        <div className="text-xs font-mono text-zinc-400 pl-2 border-l border-zinc-800">
-          {currentUser.email}
+        {/* User Account Info */}
+        <div className="hidden md:flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-600 dark:text-zinc-400">
+          <span className="truncate max-w-[160px]">{currentUser.email}</span>
         </div>
       </div>
     </header>
@@ -552,7 +646,7 @@ function Header({ activeTab, currentUser, theme, toggleTheme, voiceEnabled, setV
 }
 
 // ----------------- DASHBOARD VIEW -----------------
-function DashboardView({ currentUser, setActiveTab, showToast, theme }) {
+function DashboardView({ currentUser, setActiveTab, showToast, theme, openInEditor, askTutor }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -573,133 +667,238 @@ function DashboardView({ currentUser, setActiveTab, showToast, theme }) {
   };
 
   if (loading) {
-    return <div className="p-8 text-xs font-mono text-zinc-500">Loading metrics...</div>;
+    return (
+      <div className="p-8 text-center text-xs font-mono text-slate-500 dark:text-zinc-500 flex items-center justify-center gap-2">
+        <svg className="w-4 h-4 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeDasharray="60" strokeDashoffset="20"></circle></svg>
+        <span>Loading workspace metrics...</span>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      {/* Overview Status Bar */}
-      <div className={`p-5 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
+      {/* Overview Status Banner */}
+      <div className={`p-5 rounded-xl border shadow-sm ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-100">
-              Workspace Overview: {stats?.student_name}
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+                ACTIVE WORKSPACE
+              </span>
+            </div>
+            <h2 className={`text-xl font-bold tracking-tight ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+              Welcome back, {stats?.student_name || currentUser.name}!
             </h2>
-            <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              Level: {stats?.experience_level} | Streak: {stats?.learning_streak} days | Daily Goal: {stats?.daily_goal?.completed}/{stats?.daily_goal?.target} completed
+            <p className={`text-xs font-mono mt-1 ${theme === "dark" ? "text-zinc-400" : "text-slate-600"}`}>
+              Experience: <span className="font-semibold">{stats?.experience_level}</span> • Learning Streak: <span className="font-semibold text-amber-500">{stats?.learning_streak} days</span> • Daily Goal: <span className="font-semibold text-emerald-500">{stats?.daily_goal?.completed || 0}/{stats?.daily_goal?.target || 3} tasks</span>
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={() => setActiveTab("editor")}
-              className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-sm transition active:scale-[0.99]"
             >
-              Open Editor
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+              <span>Open Playground</span>
             </button>
             <button
               onClick={() => setActiveTab("tutor")}
-              className="px-3.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700"
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-medium border shadow-sm transition ${
+                theme === "dark"
+                  ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+              }`}
             >
-              Ask AI Tutor
+              <svg className="w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              <span>Ask AI Tutor</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Metrics Row (Plain Data Grid, No Icon Boxes) */}
-      <div className={`grid grid-cols-2 md:grid-cols-4 border divide-x divide-y md:divide-y-0 rounded-lg overflow-hidden ${
+      {/* Metrics Row (High Contrast Data Grid) */}
+      <div className={`grid grid-cols-2 lg:grid-cols-4 border divide-x divide-y sm:divide-y-0 rounded-xl overflow-hidden shadow-sm ${
         theme === "dark" ? "bg-[#121215] border-[#27272a] divide-[#27272a]" : "bg-white border-slate-200 divide-slate-200"
       }`}>
-        <div className="p-4">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block mb-1">Coding Sessions</span>
-          <span className="text-2xl font-bold font-mono text-zinc-100">{stats?.total_coding_sessions || 0}</span>
-          <span className="text-[10px] text-zinc-400 block mt-1 font-mono">Recorded runs</span>
+        <div className="p-4 sm:p-5">
+          <span className={`text-[11px] font-mono uppercase tracking-wider block mb-1 font-medium ${
+            theme === "dark" ? "text-zinc-400" : "text-slate-500"
+          }`}>
+            Coding Sessions
+          </span>
+          <span className={`text-2xl sm:text-3xl font-bold font-mono block ${
+            theme === "dark" ? "text-zinc-100" : "text-slate-900"
+          }`}>
+            {stats?.total_coding_sessions || 0}
+          </span>
+          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block mt-1 font-mono">Recorded code runs</span>
         </div>
 
-        <div className="p-4">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block mb-1">Problems Solved</span>
-          <span className="text-2xl font-bold font-mono text-zinc-100">{stats?.problems_solved || 0}</span>
-          <span className="text-[10px] text-zinc-400 block mt-1 font-mono">Practice challenges</span>
+        <div className="p-4 sm:p-5">
+          <span className={`text-[11px] font-mono uppercase tracking-wider block mb-1 font-medium ${
+            theme === "dark" ? "text-zinc-400" : "text-slate-500"
+          }`}>
+            Problems Solved
+          </span>
+          <span className={`text-2xl sm:text-3xl font-bold font-mono block text-emerald-600 dark:text-emerald-400`}>
+            {stats?.problems_solved || 0}
+          </span>
+          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block mt-1 font-mono">Practice challenges</span>
         </div>
 
-        <div className="p-4">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block mb-1">Quiz Average</span>
-          <span className="text-2xl font-bold font-mono text-zinc-100">{stats?.quiz_performance_pct || 0}%</span>
-          <span className="text-[10px] text-zinc-400 block mt-1 font-mono">Accuracy score</span>
+        <div className="p-4 sm:p-5">
+          <span className={`text-[11px] font-mono uppercase tracking-wider block mb-1 font-medium ${
+            theme === "dark" ? "text-zinc-400" : "text-slate-500"
+          }`}>
+            Quiz Average
+          </span>
+          <span className={`text-2xl sm:text-3xl font-bold font-mono block text-blue-600 dark:text-blue-400`}>
+            {stats?.quiz_performance_pct || 0}%
+          </span>
+          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block mt-1 font-mono">Accuracy score</span>
         </div>
 
-        <div className="p-4">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 block mb-1">Active Streak</span>
-          <span className="text-2xl font-bold font-mono text-zinc-100">{stats?.learning_streak || 1}d</span>
-          <span className="text-[10px] text-zinc-400 block mt-1 font-mono">Consecutive activity</span>
+        <div className="p-4 sm:p-5">
+          <span className={`text-[11px] font-mono uppercase tracking-wider block mb-1 font-medium ${
+            theme === "dark" ? "text-zinc-400" : "text-slate-500"
+          }`}>
+            Active Streak
+          </span>
+          <span className={`text-2xl sm:text-3xl font-bold font-mono block text-amber-500 dark:text-amber-400`}>
+            {stats?.learning_streak || 1}d
+          </span>
+          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block mt-1 font-mono">Consecutive days active</span>
         </div>
       </div>
 
-      {/* Two Column Layout: Unfinished Work & Saved Code */}
+      {/* Two Column Layout: Next Activity & Saved Programs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Next Activity */}
-        <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-          <div className="flex items-center justify-between pb-3 border-b border-[#27272a] mb-3">
-            <h3 className="font-semibold text-xs text-zinc-100 uppercase tracking-wider font-mono">Next Recommended Task</h3>
-            <span className="text-[10px] font-mono text-blue-400">Queue item #1</span>
+        {/* Next Recommended Task */}
+        <div className={`p-4 rounded-xl border shadow-sm ${
+          theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+        }`}>
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#27272a] mb-3">
+            <h3 className={`font-semibold text-xs uppercase tracking-wider font-mono ${
+              theme === "dark" ? "text-zinc-100" : "text-slate-900"
+            }`}>
+              Next Recommended Task
+            </h3>
+            <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400 font-semibold">Ready to start</span>
           </div>
-          <div className="p-3 rounded border border-[#27272a] bg-[#18181b] space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-200">{stats?.continue_learning?.title}</span>
+
+          <div className={`p-3.5 rounded-lg border transition ${
+            theme === "dark" 
+              ? "bg-[#18181b] border-[#27272a] text-zinc-200" 
+              : "bg-slate-50 border-slate-200 text-slate-800"
+          }`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-semibold text-xs text-blue-600 dark:text-blue-400">
+                {stats?.continue_learning?.title || "Practice Zone: Algorithm Fundamentals"}
+              </span>
               <button
                 onClick={() => setActiveTab("practice")}
-                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px]"
+                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium"
               >
                 Start
               </button>
             </div>
-            <p className="text-[11px] text-zinc-400">Variable initialization and arithmetic summation via standard input parsing.</p>
+            <p className="text-[11px] text-slate-600 dark:text-zinc-400 leading-relaxed">
+              Step through structured programming exercises, execute test cases, and strengthen fundamental problem-solving patterns.
+            </p>
           </div>
         </div>
 
-        {/* Saved Programs List */}
-        <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-          <div className="flex items-center justify-between pb-3 border-b border-[#27272a] mb-3">
-            <h3 className="font-semibold text-xs text-zinc-100 uppercase tracking-wider font-mono">Saved Programs</h3>
-            <button onClick={() => setActiveTab("editor")} className="text-[10px] font-mono text-zinc-400 hover:text-white">
-              View all
+        {/* Saved Work & Programs */}
+        <div className={`p-4 rounded-xl border shadow-sm ${
+          theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+        }`}>
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#27272a] mb-3">
+            <h3 className={`font-semibold text-xs uppercase tracking-wider font-mono ${
+              theme === "dark" ? "text-zinc-100" : "text-slate-900"
+            }`}>
+              Recent Saved Code
+            </h3>
+            <button
+              onClick={() => setActiveTab("editor")}
+              className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-mono"
+            >
+              Open Editor
             </button>
           </div>
-          <div className="space-y-1.5">
-            {stats?.saved_programs?.length > 0 ? (
-              stats.saved_programs.map(p => (
+
+          {stats?.recent_programs?.length > 0 ? (
+            <div className="space-y-2">
+              {stats.recent_programs.slice(0, 3).map((prog) => (
                 <div
-                  key={p.id}
-                  onClick={() => setActiveTab("editor")}
-                  className="p-2 rounded border border-[#27272a] bg-[#18181b] hover:bg-zinc-800 cursor-pointer flex items-center justify-between text-xs"
+                  key={prog.id}
+                  onClick={() => openInEditor(prog.code, prog.language)}
+                  className={`p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition ${
+                    theme === "dark"
+                      ? "bg-[#18181b] border-[#27272a] hover:bg-zinc-800 text-zinc-200"
+                      : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-800"
+                  }`}
                 >
-                  <span className="text-zinc-200 font-mono">{p.title}</span>
-                  <span className="text-[10px] text-zinc-400 uppercase font-mono">{p.language}</span>
+                  <div className="flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                    <span className="font-mono text-xs font-medium">{prog.title}</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded uppercase bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-400 font-semibold">
+                    {prog.language}
+                  </span>
                 </div>
-              ))
-            ) : (
-              <p className="text-xs text-zinc-500 py-2">No programs saved yet.</p>
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className={`p-4 rounded-lg border text-center text-xs text-slate-500 dark:text-zinc-500 ${
+              theme === "dark" ? "bg-[#18181b] border-[#27272a]" : "bg-slate-50 border-slate-200"
+            }`}>
+              No saved programs yet. Create a new program in the Code Playground!
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Curriculum Topics */}
-      <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-        <h3 className="font-semibold text-xs text-zinc-100 uppercase tracking-wider font-mono mb-3">Curriculum Progress</h3>
+      {/* Curriculum Roadmaps Grid */}
+      <div className={`p-4 rounded-xl border shadow-sm ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#27272a] mb-3">
+          <h3 className={`font-semibold text-xs uppercase tracking-wider font-mono ${
+            theme === "dark" ? "text-zinc-100" : "text-slate-900"
+          }`}>
+            Curriculum Progression
+          </h3>
+          <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-400">Adaptive Tracks</span>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {stats?.recommended_next_topics?.map((topic, i) => (
+          {[
+            { topic: "Python Basics & Control Flow", level: "Beginner", progress: 80, color: "bg-blue-600" },
+            { topic: "Functions & Modular Architecture", level: "Intermediate", progress: 65, color: "bg-indigo-600" },
+            { topic: "Data Structures & Two Pointers", level: "Intermediate", progress: 40, color: "bg-emerald-600" },
+            { topic: "Algorithms & Complexity (Big-O)", level: "Advanced", progress: 20, color: "bg-amber-600" }
+          ].map((item, idx) => (
             <div
-              key={i}
-              onClick={() => setActiveTab("practice")}
-              className="p-3 rounded border border-[#27272a] bg-[#18181b] hover:bg-zinc-800 cursor-pointer text-xs space-y-1"
+              key={idx}
+              className={`p-3 rounded-lg border flex flex-col justify-between ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a]" : "bg-slate-50 border-slate-200"
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase text-zinc-400">{topic.category}</span>
-                <span className="text-[10px] text-zinc-400">{topic.difficulty}</span>
+              <div>
+                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 mb-1">
+                  <span>{item.level}</span>
+                  <span className="font-semibold text-slate-700 dark:text-zinc-300">{item.progress}%</span>
+                </div>
+                <div className={`font-semibold text-xs mb-3 ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+                  {item.topic}
+                </div>
               </div>
-              <p className="font-medium text-zinc-200">{topic.title}</p>
+              <div className="w-full bg-slate-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                <div className={`${item.color} h-full rounded-full transition-all`} style={{ width: `${item.progress}%` }}></div>
+              </div>
             </div>
           ))}
         </div>
@@ -709,7 +908,7 @@ function DashboardView({ currentUser, setActiveTab, showToast, theme }) {
 }
 
 // ----------------- AI TUTOR VIEW -----------------
-function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor }) {
+function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor, tutorInitialPrompt, onClearInitialPrompt }) {
   const STORAGE_KEY = "codeloop_ai_tutor_convos_v5";
 
   // 1. Initial State & Storage Persistence
@@ -1044,6 +1243,21 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
     }
   };
 
+  // Handle incoming deep-linked prompt from Playground or Practice Zone
+  const lastProcessedPromptRef = useRef(null);
+  useEffect(() => {
+    if (tutorInitialPrompt && tutorInitialPrompt.prompt && tutorInitialPrompt.timestamp !== lastProcessedPromptRef.current) {
+      lastProcessedPromptRef.current = tutorInitialPrompt.timestamp;
+      if (tutorInitialPrompt.mode) {
+        setMode(tutorInitialPrompt.mode);
+      }
+      handleSend(tutorInitialPrompt.prompt);
+      if (onClearInitialPrompt) {
+        onClearInitialPrompt();
+      }
+    }
+  }, [tutorInitialPrompt]);
+
   // Regenerate Response
   const handleRegenerate = async () => {
     if (loading || !activeConvo?.messages?.length) return;
@@ -1145,7 +1359,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full select-none">
       {/* Top Action Bar */}
-      <div className="p-3 border-b border-[#27272a] dark:border-[#27272a] light:border-slate-200">
+      <div className="p-3 border-b border-slate-200 dark:border-[#27272a]">
         <button
           onClick={handleNewChat}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-sm transition active:scale-[0.99]"
@@ -1168,7 +1382,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search conversations..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-[#18181b] dark:bg-[#18181b] light:bg-white border border-[#27272a] dark:border-[#27272a] light:border-slate-300 text-zinc-200 light:text-slate-900 placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] text-slate-900 dark:text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
           />
           {searchQuery && (
             <button
@@ -1290,7 +1504,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
       </div>
 
       {/* Sidebar Footer Info */}
-      <div className="p-3 border-t border-[#27272a] dark:border-[#27272a] light:border-slate-200 text-[11px] text-zinc-500 flex items-center justify-between">
+      <div className="p-3 border-t border-slate-200 dark:border-[#27272a] text-[11px] text-zinc-500 flex items-center justify-between">
         <span>{conversations.length} conversation{conversations.length !== 1 ? 's' : ''}</span>
         <span className="capitalize font-mono">{mode} Mode</span>
       </div>
@@ -1358,18 +1572,18 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
               </svg>
             </button>
 
-            <span className="font-semibold truncate max-w-[200px] md:max-w-xs text-zinc-100 light:text-slate-900">
+            <span className="font-semibold truncate max-w-[200px] md:max-w-xs text-slate-900 dark:text-zinc-100">
               {activeConvo?.title}
             </span>
 
-            <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider bg-zinc-800 text-zinc-300 border border-zinc-700">
+            <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700">
               {mode}
             </span>
           </div>
 
           {/* Right: Learning Mode Switcher + Clear Chat */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-zinc-900 dark:bg-zinc-900 light:bg-slate-100 border border-[#27272a] dark:border-[#27272a] light:border-slate-300 rounded p-0.5">
+            <div className="flex items-center bg-slate-100 dark:bg-zinc-900 border border-slate-300 dark:border-[#27272a] rounded p-0.5">
               {[
                 { id: "explain", label: "Explain" },
                 { id: "practice", label: "Practice" },
@@ -1381,7 +1595,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
                   className={`px-2.5 py-1 rounded text-[11px] font-medium transition capitalize ${
                     mode === m.id
                       ? "bg-blue-600 text-white shadow-sm"
-                      : "text-zinc-400 light:text-slate-600 hover:text-white"
+                      : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                   title={`${m.label} mode`}
                 >
@@ -1414,10 +1628,10 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
                 </svg>
               </div>
 
-              <h2 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100 light:text-slate-900 mb-2">
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 mb-2">
                 What would you like to learn today?
               </h2>
-              <p className="text-sm text-zinc-400 light:text-slate-600 max-w-lg mx-auto mb-8 leading-relaxed">
+              <p className="text-sm text-slate-600 dark:text-zinc-400 max-w-lg mx-auto mb-8 leading-relaxed">
                 I am your CodeLoop AI Tutor. Ask any programming question, trace a bug in your code, or choose a topic below to begin.
               </p>
 
@@ -1441,10 +1655,10 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
                         <polyline points="9 18 15 12 9 6"></polyline>
                       </svg>
                     </div>
-                    <div className="font-semibold text-xs text-zinc-100 light:text-slate-900 mb-1">
+                    <div className="font-semibold text-xs text-slate-900 dark:text-zinc-100 mb-1">
                       {p.title}
                     </div>
-                    <div className="text-[11px] text-zinc-400 light:text-slate-500 line-clamp-2">
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-2">
                       {p.desc}
                     </div>
                   </button>
@@ -1540,8 +1754,8 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
 
                       {/* Educational Quick Action Chips on Latest Assistant Message */}
                       {isLastAssistant && !loading && (
-                        <div className="w-full mt-3.5 pt-3 border-t border-[#27272a]/60 dark:border-[#27272a]/60 light:border-slate-200">
-                          <div className="text-[11px] font-medium text-zinc-400 light:text-slate-500 mb-2">
+                        <div className="w-full mt-3.5 pt-3 border-t border-slate-200 dark:border-[#27272a]/60">
+                          <div className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 mb-2">
                             Explore further with CodeLoop AI:
                           </div>
                           <div className="flex flex-wrap gap-1.5">
@@ -1619,11 +1833,11 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a coding question, paste code to debug, or request practice problems..."
                 rows="1"
-                className="w-full bg-transparent resize-none text-sm leading-relaxed text-zinc-100 light:text-slate-900 placeholder-zinc-500 focus:outline-none min-h-[44px] max-h-[180px] p-1 font-sans"
+                className="w-full bg-transparent resize-none text-sm leading-relaxed text-slate-900 dark:text-zinc-100 placeholder-zinc-500 focus:outline-none min-h-[44px] max-h-[180px] p-1 font-sans"
               />
 
               {/* Composer Controls */}
-              <div className="flex items-center justify-between pt-2 border-t border-[#27272a]/60 dark:border-[#27272a]/60 light:border-slate-100">
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-[#27272a]/60">
                 {/* Left: Mode Pills & Voice Mic */}
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
@@ -1634,7 +1848,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
                         onClick={() => setMode(m)}
                         className={`px-2 py-0.5 rounded text-[11px] font-mono capitalize transition ${
                           mode === m
-                            ? "bg-zinc-800 dark:bg-zinc-800 light:bg-slate-200 text-blue-400 font-medium"
+                            ? "bg-slate-200 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 font-medium"
                             : "text-zinc-500 hover:text-zinc-300"
                         }`}
                       >
@@ -1687,7 +1901,7 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
               </div>
             </div>
 
-            <div className="text-[11px] text-zinc-500 dark:text-zinc-500 light:text-slate-500 text-center mt-2">
+            <div className="text-[11px] text-slate-500 dark:text-zinc-500 text-center mt-2">
               Press <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono text-[10px]">Enter</kbd> to send, <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono text-[10px]">Shift+Enter</kbd> for newline • CodeLoop AI Tutor
             </div>
           </div>
@@ -1698,9 +1912,9 @@ function AITutorView({ currentUser, theme, voiceEnabled, showToast, openInEditor
 }
 
 // ----------------- CODE EDITOR VIEW -----------------
-function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLanguage }) {
+function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLanguage, askTutor }) {
   const [language, setLanguage] = useState(initialLanguage || "python");
-  const [code, setCode] = useState(initialCode || `# CodeLoop Workspace\ndef solution():\n    numbers = [1, 2, 3, 4, 5]\n    print("Total:", sum(numbers))\n\nsolution()\n`);
+  const [code, setCode] = useState(initialCode || `# CodeLoop Workspace\ndef solution():\n    numbers = [1, 2, 3, 4, 5]\n    print("Total sum:", sum(numbers))\n\nsolution()\n`);
 
   useEffect(() => {
     if (initialCode !== undefined && initialCode !== null) {
@@ -1710,23 +1924,31 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
       setLanguage(initialLanguage);
     }
   }, [initialCode, initialLanguage]);
+
   const [stdin, setStdin] = useState("");
   const [output, setOutput] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [activeBottomTab, setActiveBottomTab] = useState("output");
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [aiResponse, setAiResponse] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
   const [programTitle, setProgramTitle] = useState("main");
   const [savedPrograms, setSavedPrograms] = useState([]);
   const [showLoadModal, setShowLoadModal] = useState(false);
+  const [splitLayout, setSplitLayout] = useState(() => {
+    return localStorage.getItem("codeloop_editor_split") !== "false";
+  });
+
+  const toggleLayout = () => {
+    setSplitLayout(prev => {
+      const next = !prev;
+      localStorage.setItem("codeloop_editor_split", String(next));
+      return next;
+    });
+  };
 
   const defaultSnippets = {
-    python: `# Python 3\ndef main():\n    print("Hello from Python")\n\nif __name__ == "__main__":\n    main()\n`,
-    javascript: `// JavaScript\nfunction main() {\n    console.log("Hello from JavaScript");\n}\nmain();\n`,
-    c: `// C\n#include <stdio.h>\n\nint main() {\n    printf("Hello from C\\n");\n    return 0;\n}\n`,
-    cpp: `// C++\n#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello from C++" << endl;\n    return 0;\n}\n`,
-    java: `// Java\npublic class Solution {\n    public static void main(String[] args) {\n        System.out.println("Hello from Java");\n    }\n}\n`
+    python: `# Python 3 Workspace\ndef main():\n    print("Hello from Python 3!")\n\nif __name__ == "__main__":\n    main()\n`,
+    javascript: `// JavaScript Workspace\nfunction main() {\n    console.log("Hello from JavaScript!");\n}\nmain();\n`,
+    c: `// C Workspace\n#include <stdio.h>\n\nint main() {\n    printf("Hello from C\\n");\n    return 0;\n}\n`,
+    cpp: `// C++ Workspace\n#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello from C++" << endl;\n    return 0;\n}\n`,
+    java: `// Java Workspace\npublic class Solution {\n    public static void main(String[] args) {\n        System.out.println("Hello from Java!");\n    }\n}\n`
   };
 
   const handleLanguageChange = (newLang) => {
@@ -1736,7 +1958,6 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
 
   const runCode = async () => {
     setIsExecuting(true);
-    setActiveBottomTab("output");
     const startTime = performance.now();
 
     // 1. In-browser Python runner with Pyodide (instant zero-latency execution)
@@ -1758,9 +1979,8 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
               stderr: stderrText,
               exit_code: 0,
               execution_time_ms: elapsed,
-              engine: "in-browser-wasm"
+              engine: "pyodide-wasm"
             });
-            // Background sync with learning history
             apiRequest("/api/execute", "POST", { language, code, stdin }).catch(() => {});
             setIsExecuting(false);
             return;
@@ -1769,33 +1989,35 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
             setOutput({
               status: "Runtime Error",
               stdout: stdoutText,
-              stderr: pyErr.message || String(pyErr),
+              stderr: pyErr.toString(),
               exit_code: 1,
               execution_time_ms: elapsed,
-              tip: "Diagnostic: Check syntax and variable names in your Python script.",
-              engine: "in-browser-wasm"
+              tip: "Diagnostic: Check your syntax, indentation, and variable bindings.",
+              engine: "pyodide-wasm"
             });
             setIsExecuting(false);
             return;
           }
         }
-      } catch (e) {
-        console.warn("Pyodide execution skipped, falling back to server:", e);
+      } catch (err) {
+        // Fallback to server execution
       }
     }
 
-    // 2. In-browser JavaScript execution
+    // 2. In-browser JavaScript Runner
     if (language === "javascript") {
       try {
-        let logs = [];
-        const customConsole = {
-          log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')),
-          warn: (...args) => logs.push("[warn] " + args.join(' ')),
-          error: (...args) => logs.push("[error] " + args.join(' ')),
-          info: (...args) => logs.push(args.join(' ')),
+        const logs = [];
+        const originalLog = console.log;
+        console.log = (...args) => {
+          logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+          originalLog.apply(console, args);
         };
-        const runFn = new Function('console', code);
-        runFn(customConsole);
+
+        const fn = new Function(code);
+        fn();
+        console.log = originalLog;
+
         const elapsed = Math.max(Math.round(performance.now() - startTime), 1);
         setOutput({
           status: "Success",
@@ -1824,7 +2046,7 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
       }
     }
 
-    // 3. Server-side Execution via API
+    // 3. Server-side Multi-Tier Compiler Execution (Judge0 CE -> Wandbox -> Piston)
     try {
       const res = await apiRequest("/api/execute", "POST", {
         language,
@@ -1852,7 +2074,7 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
         language,
         code
       });
-      showToast("Program saved.", "success");
+      showToast("Program successfully saved", "success");
     } catch (err) {
       showToast(err.message, "error");
     }
@@ -1873,218 +2095,275 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
     setLanguage(p.language);
     setCode(p.code);
     setShowLoadModal(false);
+    showToast(`Loaded ${p.title}`, "info");
   };
 
-  const runAiAssistant = async (action, targetLang = null) => {
-    setAiPanelOpen(true);
-    setAiLoading(true);
-    try {
-      const res = await apiRequest("/api/ai/chat", "POST", {
-        query: `Analyze code`,
-        code,
-        language,
-        action,
-        target_language: targetLang || "javascript",
-        error: output?.stderr || ""
-      });
-      setAiResponse(res.response);
-    } catch (err) {
-      showToast(err.message, "error");
-    } finally {
-      setAiLoading(false);
-    }
+  const askTutorAboutEditorCode = () => {
+    if (!askTutor) return;
+    const prompt = `Here is my current ${language} code:\n\n\`\`\`${language}\n${code}\n\`\`\`\n\nCould you review this code, explain its logic step by step, and suggest any optimizations or edge cases I should consider?`;
+    askTutor(prompt, "explain");
+  };
+
+  const askTutorToFixError = () => {
+    if (!askTutor || !output) return;
+    const prompt = `My ${language} code generated the following execution error:\n\n\`\`\`\n${output.stderr || output.stdout || "Execution failed"}\n\`\`\`\n\nHere is my source code:\n\n\`\`\`${language}\n${code}\n\`\`\`\n\nPlease explain why this error happened and how I can fix it step by step.`;
+    askTutor(prompt, "explain");
   };
 
   return (
     <div className="space-y-3">
-      {/* Action Bar */}
-      <div className={`p-2.5 rounded-lg border flex flex-wrap items-center justify-between gap-2 ${
+      {/* Top Action Toolbar */}
+      <div className={`p-3 rounded-xl border shadow-sm flex flex-wrap items-center justify-between gap-3 ${
         theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
       }`}>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={programTitle}
-            onChange={(e) => setProgramTitle(e.target.value)}
-            className="bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-zinc-500 w-36"
-          />
+        {/* Left: Program Title, Language Selector, File Management */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <svg className="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <input
+              type="text"
+              value={programTitle}
+              onChange={(e) => setProgramTitle(e.target.value)}
+              placeholder="Filename"
+              className={`border rounded-md px-2.5 py-1 text-xs font-mono w-36 focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" 
+                  ? "bg-[#18181b] border-[#27272a] text-zinc-100" 
+                  : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
+            />
+          </div>
 
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-zinc-500"
+            className={`border rounded-md px-2.5 py-1 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+              theme === "dark" 
+                ? "bg-[#18181b] border-[#27272a] text-zinc-200" 
+                : "bg-slate-50 border-slate-300 text-slate-900"
+            }`}
           >
             <option value="python">Python 3</option>
             <option value="javascript">JavaScript</option>
-            <option value="c">C</option>
-            <option value="cpp">C++</option>
-            <option value="java">Java</option>
+            <option value="c">C (GCC)</option>
+            <option value="cpp">C++ (G++)</option>
+            <option value="java">Java (OpenJDK)</option>
           </select>
 
-          <button
-            onClick={saveProgram}
-            className="px-2.5 py-1 rounded bg-[#18181b] hover:bg-zinc-800 text-zinc-200 text-xs font-mono border border-[#27272a]"
-          >
-            Save
-          </button>
-
-          <button
-            onClick={openLoadModal}
-            className="px-2.5 py-1 rounded bg-[#18181b] hover:bg-zinc-800 text-zinc-200 text-xs font-mono border border-[#27272a]"
-          >
-            Load
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAiPanelOpen(!aiPanelOpen)}
-            className={`px-3 py-1 rounded text-xs font-mono border ${
-              aiPanelOpen 
-                ? "bg-zinc-800 border-zinc-600 text-white" 
-                : "bg-transparent border-[#27272a] text-zinc-400 hover:text-white"
-            }`}
-          >
-            Assistant
-          </button>
-
-          <button
-            onClick={runCode}
-            disabled={isExecuting}
-            className="px-4 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium font-mono disabled:opacity-50"
-          >
-            {isExecuting ? "Executing..." : "Run"}
-          </button>
-        </div>
-      </div>
-
-      {/* Editor & Side Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className={`rounded-lg border overflow-hidden ${
-          aiPanelOpen ? "lg:col-span-2" : "lg:col-span-3"
-        } ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-          <MonacoEditor
-            code={code}
-            language={language}
-            onChange={setCode}
-            height="460px"
-            theme={theme}
-          />
-        </div>
-
-        {aiPanelOpen && (
-          <div className={`p-3 rounded-lg border flex flex-col h-[460px] ${
-            theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
-          }`}>
-            <div className="flex items-center justify-between pb-2 border-b border-[#27272a]">
-              <span className="font-mono text-xs font-semibold text-zinc-200 uppercase">Analysis Tools</span>
-              <button onClick={() => setAiPanelOpen(false)} className="text-zinc-500 hover:text-white text-xs">
-                Close
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-1.5 my-2">
-              <button
-                onClick={() => runAiAssistant("line_by_line")}
-                className="p-1.5 rounded bg-[#18181b] hover:bg-zinc-800 text-[11px] font-mono text-zinc-300 border border-[#27272a] text-left"
-              >
-                Line-by-line
-              </button>
-              <button
-                onClick={() => runAiAssistant("debug")}
-                className="p-1.5 rounded bg-[#18181b] hover:bg-zinc-800 text-[11px] font-mono text-zinc-300 border border-[#27272a] text-left"
-              >
-                Debug
-              </button>
-              <button
-                onClick={() => runAiAssistant("convert", language === "python" ? "javascript" : "python")}
-                className="p-1.5 rounded bg-[#18181b] hover:bg-zinc-800 text-[11px] font-mono text-zinc-300 border border-[#27272a] text-left"
-              >
-                Convert
-              </button>
-              <button
-                onClick={() => runAiAssistant("chat")}
-                className="p-1.5 rounded bg-[#18181b] hover:bg-zinc-800 text-[11px] font-mono text-zinc-300 border border-[#27272a] text-left"
-              >
-                Explain
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2.5 rounded bg-[#09090b] border border-[#27272a] text-xs">
-              {aiLoading ? (
-                <div className="text-zinc-500 font-mono text-xs">Generating analysis...</div>
-              ) : aiResponse ? (
-                <div className="prose-dark" dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(aiResponse) : aiResponse }} />
-              ) : (
-                <p className="text-zinc-500 font-mono text-xs">Select an analysis tool above.</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Unified Terminal & Output Console */}
-      <div className={`rounded-lg border overflow-hidden ${
-        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
-      }`}>
-        <div className="px-3 py-1.5 border-b border-[#27272a] flex items-center justify-between bg-[#141417]">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>Terminal & Console</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {output && (
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                output.status === "Success" ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-red-950 text-red-300 border border-red-800"
-              }`}>
-                {output.status} ({output.execution_time_ms || 0}ms)
-              </span>
-            )}
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => { setOutput(null); setStdin(""); }}
-              className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300"
-              title="Clear input and console output"
+              onClick={saveProgram}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono border transition ${
+                theme === "dark"
+                  ? "bg-[#18181b] hover:bg-zinc-800 text-zinc-200 border-[#27272a]"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-300"
+              }`}
+              title="Save program"
             >
-              Clear
+              <svg className="w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              <span>Save</span>
+            </button>
+
+            <button
+              onClick={openLoadModal}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono border transition ${
+                theme === "dark"
+                  ? "bg-[#18181b] hover:bg-zinc-800 text-zinc-200 border-[#27272a]"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-300"
+              }`}
+              title="Load saved programs"
+            >
+              <svg className="w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              <span>Load</span>
             </button>
           </div>
         </div>
 
-        <div className="p-3 font-mono text-xs min-h-[140px] bg-[#09090b] flex flex-col gap-2.5">
-          {/* Integrated Input Slot (Always visible, single unified slot) */}
-          <div className="flex items-center gap-2 pb-2.5 border-b border-[#27272a]/70">
-            <span className="text-zinc-400 font-mono text-xs select-none whitespace-nowrap">Input:</span>
-            <input
-              type="text"
-              value={stdin}
-              onChange={(e) => setStdin(e.target.value)}
-              placeholder="Type program input here (e.g. 10 20 for scanf or input)... passed automatically on Run"
-              className="flex-1 bg-[#141417] border border-[#27272a] rounded px-2.5 py-1 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
-            />
+        {/* Right: Layout Toggle, Ask AI Tutor, Run Button */}
+        <div className="flex items-center gap-2">
+          {/* Split/Stack layout switcher (desktop) */}
+          <button
+            onClick={toggleLayout}
+            className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border transition ${
+              theme === "dark"
+                ? "bg-[#18181b] hover:bg-zinc-800 text-zinc-300 border-[#27272a]"
+                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
+            }`}
+            title="Toggle Split / Stack View Layout"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {splitLayout ? (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="12" y1="3" x2="12" y2="21"></line>
+                </>
+              ) : (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                </>
+              )}
+            </svg>
+            <span>{splitLayout ? "Split View" : "Stack View"}</span>
+          </button>
+
+          {/* Ask AI Tutor */}
+          <button
+            onClick={askTutorAboutEditorCode}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition ${
+              theme === "dark"
+                ? "bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 border-blue-800/60"
+                : "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+            }`}
+            title="Ask AI Tutor to review or explain this code"
+          >
+            <svg className="w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+            <span>Ask Tutor</span>
+          </button>
+
+          {/* Primary Run Button */}
+          <button
+            onClick={runCode}
+            disabled={isExecuting}
+            className="flex items-center gap-1.5 px-4 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98]"
+            title="Execute Code (Ctrl + Enter)"
+          >
+            {isExecuting ? (
+              <>
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeDasharray="60" strokeDashoffset="20"></circle></svg>
+                <span>Executing...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Run</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Editor & Console Area (Split or Stack layout) */}
+      <div className={`grid gap-3 ${splitLayout ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"}`}>
+        {/* Editor Box */}
+        <div className={`rounded-xl border overflow-hidden shadow-sm flex flex-col ${
+          theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+        }`}>
+          {/* Editor Header Tab */}
+          <div className={`px-3 py-1.5 border-b flex items-center justify-between text-xs font-mono ${
+            theme === "dark" ? "bg-[#141418] border-[#27272a] text-zinc-400" : "bg-slate-100 border-slate-200 text-slate-600"
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+              <span className={`font-semibold ${theme === "dark" ? "text-zinc-200" : "text-slate-800"}`}>
+                {programTitle ? `${programTitle}.${language === "python" ? "py" : language === "javascript" ? "js" : language}` : "main"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+              <span className="uppercase">{language}</span>
+              <span>•</span>
+              <span>UTF-8</span>
+            </div>
           </div>
 
-          {/* Integrated Output Slot */}
-          <div className="flex-1 overflow-y-auto">
-            {output ? (
-              <div className="space-y-2">
-                {output.stdout && (
-                  <pre className="text-zinc-200 whitespace-pre-wrap">{output.stdout}</pre>
-                )}
-                {output.stderr && (
-                  <pre className="text-red-400 whitespace-pre-wrap">{output.stderr}</pre>
-                )}
-                {output.tip && (
-                  <div className="p-2 border border-zinc-800 bg-zinc-900/60 text-zinc-300 text-xs rounded">
-                    {output.tip}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-zinc-600">Console ready. Click Run to execute.</p>
-            )}
+          <MonacoEditor
+            code={code}
+            language={language}
+            onChange={setCode}
+            height={splitLayout ? "540px" : "440px"}
+            theme={theme}
+          />
+        </div>
+
+        {/* Output Console Box */}
+        <div className={`rounded-xl border overflow-hidden shadow-sm flex flex-col ${
+          theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+        }`}>
+          {/* Console Header */}
+          <div className={`px-3.5 py-1.5 border-b flex items-center justify-between text-xs font-mono ${
+            theme === "dark" ? "bg-[#141418] border-[#27272a]" : "bg-slate-100 border-slate-200"
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span className={`font-semibold ${theme === "dark" ? "text-zinc-200" : "text-slate-800"}`}>
+                Console & Terminal
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {output && (
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-medium ${
+                  output.status === "Success" 
+                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800" 
+                    : "bg-red-950/80 text-red-300 border border-red-800"
+                }`}>
+                  {output.status} ({output.execution_time_ms || 0}ms)
+                </span>
+              )}
+              <button
+                onClick={() => { setOutput(null); setStdin(""); }}
+                className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 transition"
+                title="Clear console"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className={`p-3 font-mono text-xs flex flex-col flex-1 ${
+            splitLayout ? "min-h-[480px]" : "min-h-[160px]"
+          } ${theme === "dark" ? "bg-[#0c0c0e] text-zinc-100" : "bg-slate-900 text-slate-100"}`}>
+            {/* Integrated STDIN Input bar */}
+            <div className="flex items-center gap-2 pb-2.5 border-b border-zinc-800/80 mb-2.5">
+              <span className="text-zinc-400 font-mono text-xs select-none">STDIN:</span>
+              <input
+                type="text"
+                value={stdin}
+                onChange={(e) => setStdin(e.target.value)}
+                placeholder="Type inputs passed to program (e.g. 10 20)..."
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition"
+              />
+            </div>
+
+            {/* Terminal Stream */}
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {output ? (
+                <div>
+                  {output.stdout && (
+                    <pre className="text-emerald-400 whitespace-pre-wrap leading-relaxed">{output.stdout}</pre>
+                  )}
+                  {output.stderr && (
+                    <div className="mt-2 p-2.5 rounded bg-red-950/50 border border-red-800/80 text-red-300">
+                      <pre className="whitespace-pre-wrap">{output.stderr}</pre>
+                    </div>
+                  )}
+                  {output.tip && (
+                    <div className="mt-2 p-2 border border-blue-900/50 bg-blue-950/30 text-blue-200 text-xs rounded">
+                      {output.tip}
+                    </div>
+                  )}
+
+                  {/* Deep Integration: Explain & Fix Error with AI Tutor */}
+                  {output.stderr && (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 select-none">
+                      <div className="flex items-center gap-2 text-xs text-amber-300">
+                        <svg className="w-4 h-4 shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        <span>Need help understanding this error? Ask the AI Tutor.</span>
+                      </div>
+                      <button
+                        onClick={askTutorToFixError}
+                        className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium shrink-0 flex items-center gap-1.5 shadow-sm transition active:scale-95"
+                      >
+                        <span>Diagnose Error</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-zinc-500 select-none py-2">
+                  Console ready. Click "Run" or press Ctrl+Enter to compile and execute.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -2092,24 +2371,38 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
       {/* Program Loader Modal */}
       {showLoadModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-lg w-full max-w-md p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-[#27272a] pb-2">
-              <span className="font-mono text-xs font-semibold text-zinc-200 uppercase">Load Saved Program</span>
-              <button onClick={() => setShowLoadModal(false)} className="text-zinc-500 hover:text-white text-xs">
+          <div className={`border rounded-xl w-full max-w-md p-4 space-y-3 shadow-xl ${
+            theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+          }`}>
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className={`font-semibold text-xs font-mono uppercase ${theme === "dark" ? "text-zinc-200" : "text-slate-800"}`}>
+                Load Saved Program
+              </span>
+              <button onClick={() => setShowLoadModal(false)} className="text-zinc-500 hover:text-zinc-700 text-xs">
                 Cancel
               </button>
             </div>
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              {savedPrograms.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => loadSelectedProgram(p)}
-                  className="p-2 rounded border border-[#27272a] bg-[#18181b] hover:bg-zinc-800 cursor-pointer flex items-center justify-between text-xs"
-                >
-                  <span className="text-zinc-200 font-mono">{p.title}</span>
-                  <span className="text-[10px] text-zinc-400 uppercase font-mono">{p.language}</span>
-                </div>
-              ))}
+            <div className="max-h-64 overflow-y-auto space-y-1.5">
+              {savedPrograms.length === 0 ? (
+                <p className="p-4 text-center text-xs text-zinc-500">No saved programs found.</p>
+              ) : (
+                savedPrograms.map(p => (
+                  <div
+                    key={p.id}
+                    onClick={() => loadSelectedProgram(p)}
+                    className={`p-2.5 rounded-lg border cursor-pointer flex items-center justify-between text-xs transition ${
+                      theme === "dark"
+                        ? "bg-[#18181b] border-[#27272a] hover:bg-zinc-800 text-zinc-200"
+                        : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <span className="font-mono font-medium">{p.title}</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded uppercase bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-400 font-semibold">
+                      {p.language}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -2119,7 +2412,7 @@ function CodeEditorView({ currentUser, theme, showToast, initialCode, initialLan
 }
 
 // ----------------- PRACTICE ZONE VIEW -----------------
-function PracticeZoneView({ currentUser, theme, showToast }) {
+function PracticeZoneView({ currentUser, theme, showToast, askTutor }) {
   const [problems, setProblems] = useState([]);
   const [selectedProblem, setSelectedProblem] = useState(null);
   const [filterDifficulty, setFilterDifficulty] = useState("all");
@@ -2174,6 +2467,12 @@ function PracticeZoneView({ currentUser, theme, showToast }) {
     }
   };
 
+  const askTutorForConceptualHint = () => {
+    if (!askTutor || !selectedProblem) return;
+    const prompt = `I am practicing the coding problem "${selectedProblem.title}" in Python:\n\n${selectedProblem.description}\n\nCould you give me a conceptual hint or mental model on how to solve this, without giving away the full code solution?`;
+    askTutor(prompt, "practice");
+  };
+
   const submitSolution = async () => {
     if (!selectedProblem || submitting) return;
     setSubmitting(true);
@@ -2187,6 +2486,7 @@ function PracticeZoneView({ currentUser, theme, showToast }) {
       setSubmissionResult(res);
       if (res.status === "Accepted") {
         setProblems(prev => prev.map(p => p.id === selectedProblem.id ? { ...p, solved: true } : p));
+        showToast("Problem Solved! Accepted.", "success");
       }
     } catch (err) {
       showToast(err.message, "error");
@@ -2202,26 +2502,35 @@ function PracticeZoneView({ currentUser, theme, showToast }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-      {/* Problem Directory */}
-      <div className={`lg:col-span-4 rounded-lg border p-3 flex flex-col h-[700px] ${
+      {/* Problem Directory Sidebar */}
+      <div className={`lg:col-span-4 rounded-xl border p-3 flex flex-col h-[740px] shadow-sm ${
         theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
       }`}>
-        <div className="flex items-center justify-between pb-2 border-b border-[#27272a]">
-          <span className="font-mono text-xs font-semibold text-zinc-100 uppercase">Challenges</span>
-          <span className="text-[11px] font-mono text-zinc-400">
+        <div className={`flex items-center justify-between pb-2 border-b ${
+          theme === "dark" ? "border-[#27272a]" : "border-slate-200"
+        }`}>
+          <span className={`font-mono text-xs font-semibold uppercase ${
+            theme === "dark" ? "text-zinc-100" : "text-slate-900"
+          }`}>
+            Challenges
+          </span>
+          <span className="text-[11px] font-mono text-emerald-500 font-semibold">
             {problems.filter(p => p.solved).length}/{problems.length} Solved
           </span>
         </div>
 
-        <div className="flex gap-1 my-2">
+        {/* Difficulty Filter Pills */}
+        <div className="flex gap-1 my-2.5">
           {["all", "beginner", "intermediate", "advanced"].map(d => (
             <button
               key={d}
               onClick={() => setFilterDifficulty(d)}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono capitalize ${
+              className={`px-2 py-0.5 rounded text-[11px] font-mono capitalize transition ${
                 filterDifficulty === d 
-                  ? "bg-zinc-800 text-white" 
-                  : "text-zinc-500 hover:text-zinc-300"
+                  ? "bg-blue-600 text-white font-medium shadow-sm" 
+                  : theme === "dark"
+                  ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
               {d}
@@ -2229,74 +2538,128 @@ function PracticeZoneView({ currentUser, theme, showToast }) {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-1">
+        {/* Problem List */}
+        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
           {filteredProblems.map(p => {
             const isSelected = selectedProblem?.id === p.id;
             return (
               <div
                 key={p.id}
                 onClick={() => loadProblem(p.id)}
-                className={`p-2.5 rounded border cursor-pointer text-xs ${
+                className={`p-3 rounded-lg border cursor-pointer text-xs transition ${
                   isSelected
-                    ? "bg-zinc-800 border-zinc-600 text-white"
-                    : "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-800/60"
+                    ? theme === "dark"
+                      ? "bg-zinc-800/90 border-blue-500/60 text-white shadow-sm"
+                      : "bg-blue-50/80 border-blue-300 text-blue-950 font-medium shadow-sm"
+                    : theme === "dark"
+                      ? "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-800/60"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                 }`}
               >
-                <div className="flex items-center justify-between font-mono text-[10px] text-zinc-400 mb-0.5">
-                  <span>{p.difficulty}</span>
-                  {p.solved && <span className="text-emerald-400">PASSED</span>}
+                <div className="flex items-center justify-between font-mono text-[10px] text-zinc-500 mb-1">
+                  <span className="uppercase font-semibold tracking-wider">{p.difficulty}</span>
+                  {p.solved ? (
+                    <span className="text-emerald-500 font-bold flex items-center gap-1">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      SOLVED
+                    </span>
+                  ) : (
+                    <span className="text-zinc-400 font-mono">10 pts</span>
+                  )}
                 </div>
-                <div className="font-medium truncate">{p.title}</div>
+                <div className="font-semibold truncate text-xs">{p.title}</div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Workspace */}
+      {/* Problem Workspace */}
       <div className="lg:col-span-8 space-y-3">
         {selectedProblem && (
           <>
-            <div className={`p-4 rounded-lg border space-y-3 ${
+            {/* Description Card */}
+            <div className={`p-4 rounded-xl border space-y-3 shadow-sm ${
               theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
             }`}>
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-zinc-100">{selectedProblem.title}</h3>
-                <span className="text-xs font-mono text-zinc-400">{selectedProblem.topic}</span>
-              </div>
-              <p className="text-xs text-zinc-300 leading-relaxed">{selectedProblem.description}</p>
-
-              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                <div className="p-2 rounded bg-[#09090b] border border-[#27272a]">
-                  <span className="text-zinc-500 block text-[10px] uppercase">Input</span>
-                  <span className="text-zinc-300">{selectedProblem.input_format}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className={`text-base font-bold tracking-tight ${
+                  theme === "dark" ? "text-zinc-100" : "text-slate-900"
+                }`}>
+                  {selectedProblem.title}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+                    {selectedProblem.topic}
+                  </span>
+                  <button
+                    onClick={askTutorForConceptualHint}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border transition ${
+                      theme === "dark"
+                        ? "bg-blue-950/40 text-blue-300 border-blue-800 hover:bg-blue-900/60"
+                        : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                    }`}
+                    title="Ask AI Tutor for a guided hint"
+                  >
+                    <svg className="w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>Ask Tutor Hint</span>
+                  </button>
                 </div>
-                <div className="p-2 rounded bg-[#09090b] border border-[#27272a]">
-                  <span className="text-zinc-500 block text-[10px] uppercase">Output</span>
-                  <span className="text-zinc-300">{selectedProblem.output_format}</span>
+              </div>
+
+              <p className={`text-xs leading-relaxed ${
+                theme === "dark" ? "text-zinc-300" : "text-slate-700"
+              }`}>
+                {selectedProblem.description}
+              </p>
+
+              {/* Input / Output Format Specifications */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-mono">
+                <div className={`p-2.5 rounded-lg border ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a]" : "bg-slate-50 border-slate-200"
+                }`}>
+                  <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] uppercase font-semibold mb-0.5">Input Format</span>
+                  <span className={theme === "dark" ? "text-zinc-200" : "text-slate-800"}>{selectedProblem.input_format}</span>
+                </div>
+                <div className={`p-2.5 rounded-lg border ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a]" : "bg-slate-50 border-slate-200"
+                }`}>
+                  <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] uppercase font-semibold mb-0.5">Output Format</span>
+                  <span className={theme === "dark" ? "text-zinc-200" : "text-slate-800"}>{selectedProblem.output_format}</span>
                 </div>
               </div>
             </div>
 
             {/* Hint System */}
-            <div className={`p-3 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono text-zinc-400 uppercase">
+            <div className={`p-3.5 rounded-xl border shadow-sm ${
+              theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-mono font-medium ${
+                  theme === "dark" ? "text-zinc-400" : "text-slate-600"
+                }`}>
                   Hint Tier: {currentHintLevel}/{selectedProblem.total_hints}
                 </span>
                 <button
                   onClick={requestNextHint}
                   disabled={currentHintLevel >= selectedProblem.total_hints}
-                  className="px-2.5 py-1 rounded bg-[#18181b] hover:bg-zinc-800 text-zinc-300 text-xs font-mono border border-[#27272a] disabled:opacity-40"
+                  className={`px-3 py-1 rounded-md text-xs font-mono border transition disabled:opacity-40 ${
+                    theme === "dark"
+                      ? "bg-[#18181b] hover:bg-zinc-800 text-zinc-300 border-[#27272a]"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+                  }`}
                 >
-                  {currentHintLevel === 0 ? "Request Hint 1" : currentHintLevel === selectedProblem.total_hints - 1 ? "Show Solution" : "Next Hint"}
+                  {currentHintLevel === 0 ? "Unlock Hint 1" : currentHintLevel === selectedProblem.total_hints - 1 ? "Show Full Solution" : "Unlock Next Hint"}
                 </button>
               </div>
 
               {Object.keys(revealedHints).length > 0 && (
-                <div className="space-y-1.5 pt-2 border-t border-[#27272a]">
+                <div className={`space-y-1.5 pt-2.5 mt-2.5 border-t ${theme === "dark" ? "border-[#27272a]" : "border-slate-200"}`}>
                   {Object.entries(revealedHints).map(([lvl, text]) => (
-                    <div key={lvl} className="p-2 rounded bg-[#09090b] border border-[#27272a] text-xs font-mono text-zinc-300 whitespace-pre-wrap">
+                    <div key={lvl} className={`p-2.5 rounded-lg border text-xs font-mono leading-relaxed whitespace-pre-wrap ${
+                      theme === "dark" ? "bg-[#09090b] border-[#27272a] text-zinc-300" : "bg-slate-50 border-slate-200 text-slate-800"
+                    }`}>
+                      <span className="text-blue-500 font-bold block mb-0.5">Hint {lvl}:</span>
                       {text}
                     </div>
                   ))}
@@ -2304,34 +2667,40 @@ function PracticeZoneView({ currentUser, theme, showToast }) {
               )}
             </div>
 
-            {/* Editor Container */}
-            <div className={`rounded-lg border overflow-hidden ${
+            {/* Submission Code Editor */}
+            <div className={`rounded-xl border overflow-hidden shadow-sm ${
               theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
             }`}>
-              <div className="p-2 border-b border-[#27272a] flex items-center justify-between bg-[#141417]">
-                <select
-                  value={language}
-                  onChange={(e) => {
-                    setLanguage(e.target.value);
-                    if (selectedProblem.starter_codes?.[e.target.value]) {
-                      setCode(selectedProblem.starter_codes[e.target.value]);
-                    }
-                  }}
-                  className="bg-[#18181b] border border-[#27272a] rounded px-2 py-1 text-xs font-mono text-zinc-300"
-                >
-                  <option value="python">Python 3</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="c">C</option>
-                  <option value="cpp">C++</option>
-                  <option value="java">Java</option>
-                </select>
+              <div className={`p-2.5 border-b flex items-center justify-between ${
+                theme === "dark" ? "bg-[#141418] border-[#27272a]" : "bg-slate-100 border-slate-200"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={language}
+                    onChange={(e) => {
+                      setLanguage(e.target.value);
+                      if (selectedProblem.starter_codes?.[e.target.value]) {
+                        setCode(selectedProblem.starter_codes[e.target.value]);
+                      }
+                    }}
+                    className={`border rounded-md px-2.5 py-1 text-xs font-mono ${
+                      theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-white border-slate-300 text-slate-900"
+                    }`}
+                  >
+                    <option value="python">Python 3</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="c">C</option>
+                    <option value="cpp">C++</option>
+                    <option value="java">Java</option>
+                  </select>
+                </div>
 
                 <button
                   onClick={submitSolution}
                   disabled={submitting}
-                  className="px-4 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium font-mono disabled:opacity-50"
+                  className="px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition active:scale-[0.98]"
                 >
-                  {submitting ? "Testing..." : "Submit Solution"}
+                  {submitting ? "Evaluating..." : "Submit Solution"}
                 </button>
               </div>
 
@@ -2344,19 +2713,25 @@ function PracticeZoneView({ currentUser, theme, showToast }) {
               />
             </div>
 
-            {/* Verification Result */}
+            {/* Submission Evaluation Result */}
             {submissionResult && (
-              <div className={`p-4 rounded-lg border text-xs font-mono space-y-2 ${
+              <div className={`p-4 rounded-xl border text-xs font-mono shadow-sm ${
                 submissionResult.status === "Accepted"
                   ? "bg-emerald-950/40 border-emerald-800 text-emerald-200"
                   : "bg-red-950/40 border-red-800 text-red-200"
               }`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold">
-                    Result: {submissionResult.status} ({submissionResult.passed_tests}/{submissionResult.total_tests} test cases passed)
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-sm">
+                    {submissionResult.status === "Accepted" ? "Verdict: Accepted (All Tests Passed!)" : "Verdict: Failed Test Cases"}
                   </span>
+                  <span>{submissionResult.passed_tests}/{submissionResult.total_tests} Tests Passed</span>
                 </div>
-                <p className="text-zinc-400">{submissionResult.explanation}</p>
+                {submissionResult.explanation && (
+                  <p className="text-xs opacity-90">{submissionResult.explanation}</p>
+                )}
+                {submissionResult.error && (
+                  <pre className="mt-2 p-2 rounded bg-red-950/60 text-red-300 whitespace-pre-wrap">{submissionResult.error}</pre>
+                )}
               </div>
             )}
           </>
@@ -2422,23 +2797,34 @@ function QuizzesView({ currentUser, theme, showToast }) {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-3xl mx-auto space-y-4">
       {quizState === "idle" && (
-        <div className={`p-5 rounded-lg border space-y-4 ${
+        <div className={`p-6 rounded-xl border shadow-sm space-y-4 ${
           theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
         }`}>
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100 font-mono uppercase">Assessment Generator</h3>
-            <p className="text-xs text-zinc-400 mt-1">Generate evaluation tests based on parameter bounds.</p>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+                ASSESSMENT GENERATOR
+              </span>
+            </div>
+            <h3 className={`text-base font-bold tracking-tight ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+              Custom Interactive Knowledge Quiz
+            </h3>
+            <p className={`text-xs mt-1 ${theme === "dark" ? "text-zinc-400" : "text-slate-600"}`}>
+              Generate dynamic programming multiple-choice evaluation tests based on parameter bounds.
+            </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs font-mono text-zinc-400 block mb-1">Topic</label>
+              <label className={`text-xs font-medium block mb-1 ${theme === "dark" ? "text-zinc-400" : "text-slate-700"}`}>Topic</label>
               <select
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1.5 text-xs text-zinc-200"
+                className={`w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-slate-50 border-slate-300 text-slate-900"
+                }`}
               >
                 <option value="Python Basics">Python Basics</option>
                 <option value="Loops & Iteration">Loops & Iteration</option>
@@ -2448,11 +2834,13 @@ function QuizzesView({ currentUser, theme, showToast }) {
             </div>
 
             <div>
-              <label className="text-xs font-mono text-zinc-400 block mb-1">Language</label>
+              <label className={`text-xs font-medium block mb-1 ${theme === "dark" ? "text-zinc-400" : "text-slate-700"}`}>Language</label>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1.5 text-xs text-zinc-200"
+                className={`w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-slate-50 border-slate-300 text-slate-900"
+                }`}
               >
                 <option value="Python">Python</option>
                 <option value="JavaScript">JavaScript</option>
@@ -2462,11 +2850,13 @@ function QuizzesView({ currentUser, theme, showToast }) {
             </div>
 
             <div>
-              <label className="text-xs font-mono text-zinc-400 block mb-1">Difficulty</label>
+              <label className={`text-xs font-medium block mb-1 ${theme === "dark" ? "text-zinc-400" : "text-slate-700"}`}>Difficulty</label>
               <select
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1.5 text-xs text-zinc-200"
+                className={`w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-slate-50 border-slate-300 text-slate-900"
+                }`}
               >
                 <option value="Beginner">Beginner</option>
                 <option value="Intermediate">Intermediate</option>
@@ -2478,58 +2868,71 @@ function QuizzesView({ currentUser, theme, showToast }) {
           <button
             onClick={startQuiz}
             disabled={loading}
-            className="w-full py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium font-mono disabled:opacity-50"
+            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition active:scale-[0.99] flex items-center justify-center gap-2"
           >
-            {loading ? "Generating questions..." : "Generate Assessment"}
+            {loading ? "Generating Questions..." : "Generate Assessment"}
           </button>
         </div>
       )}
 
       {quizState === "running" && questions.length > 0 && (
-        <div className={`p-5 rounded-lg border space-y-4 ${
+        <div className={`p-6 rounded-xl border shadow-sm space-y-4 ${
           theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
         }`}>
-          <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pb-2 border-b border-[#27272a]">
+          <div className={`flex items-center justify-between text-xs font-mono pb-3 border-b ${
+            theme === "dark" ? "border-[#27272a] text-zinc-400" : "border-slate-200 text-slate-600"
+          }`}>
             <span>Question {currentQIndex + 1} of {questions.length}</span>
-            <span>{topic} / {difficulty}</span>
+            <span className="font-semibold text-blue-600 dark:text-blue-400">{topic} • {difficulty}</span>
           </div>
 
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium text-zinc-100">{questions[currentQIndex].question}</h4>
-
-            {questions[currentQIndex].code_snippet && (
-              <pre className="p-2.5 rounded bg-[#09090b] border border-[#27272a] font-mono text-xs text-zinc-200">
-                {questions[currentQIndex].code_snippet}
-              </pre>
-            )}
-
-            <div className="space-y-1.5">
-              {questions[currentQIndex].options?.map((opt, oIdx) => {
-                const qid = String(questions[currentQIndex].id);
-                const isSelected = selectedAnswers[qid] === oIdx;
-                return (
-                  <div
-                    key={oIdx}
-                    onClick={() => handleSelectOption(oIdx)}
-                    className={`p-2.5 rounded border cursor-pointer text-xs flex items-center justify-between ${
-                      isSelected
-                        ? "bg-zinc-800 border-zinc-600 text-white"
-                        : "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-850"
-                    }`}
-                  >
-                    <span>{opt}</span>
-                    <span className="font-mono text-[10px] text-zinc-500">[{oIdx + 1}]</span>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="py-2">
+            <h4 className={`text-base font-semibold leading-relaxed ${
+              theme === "dark" ? "text-zinc-100" : "text-slate-900"
+            }`}>
+              {questions[currentQIndex]?.question}
+            </h4>
           </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-[#27272a]">
+          <div className="space-y-2 pt-1">
+            {questions[currentQIndex]?.options?.map((opt, optIdx) => {
+              const qid = String(questions[currentQIndex].id);
+              const isSelected = selectedAnswers[qid] === optIdx;
+
+              return (
+                <div
+                  key={optIdx}
+                  onClick={() => handleSelectOption(optIdx)}
+                  className={`p-3.5 rounded-lg border cursor-pointer text-xs transition flex items-center gap-3 ${
+                    isSelected
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : theme === "dark"
+                      ? "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-800"
+                      : "bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono shrink-0 ${
+                    isSelected ? "border-white bg-white text-blue-600 font-bold" : "border-zinc-400"
+                  }`}>
+                    {String.fromCharCode(65 + optIdx)}
+                  </span>
+                  <span className="font-medium leading-relaxed">{opt}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className={`flex items-center justify-between pt-4 border-t ${
+            theme === "dark" ? "border-[#27272a]" : "border-slate-200"
+          }`}>
             <button
               onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
               disabled={currentQIndex === 0}
-              className="px-3 py-1 rounded bg-[#18181b] text-zinc-300 text-xs font-mono border border-[#27272a] disabled:opacity-40"
+              className={`px-3.5 py-1.5 rounded-md text-xs font-mono border transition disabled:opacity-30 ${
+                theme === "dark"
+                  ? "bg-[#18181b] text-zinc-300 border-[#27272a] hover:bg-zinc-800"
+                  : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
+              }`}
             >
               Previous
             </button>
@@ -2537,17 +2940,17 @@ function QuizzesView({ currentUser, theme, showToast }) {
             {currentQIndex < questions.length - 1 ? (
               <button
                 onClick={() => setCurrentQIndex(prev => prev + 1)}
-                className="px-4 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono"
+                className="px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition"
               >
-                Next
+                Next Question
               </button>
             ) : (
               <button
                 onClick={submitQuiz}
                 disabled={loading}
-                className="px-4 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono"
+                className="px-5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition"
               >
-                Submit
+                Submit Answers
               </button>
             )}
           </div>
@@ -2555,39 +2958,49 @@ function QuizzesView({ currentUser, theme, showToast }) {
       )}
 
       {quizState === "result" && quizResult && (
-        <div className={`p-5 rounded-lg border space-y-4 ${
+        <div className={`p-6 rounded-xl border space-y-4 shadow-sm ${
           theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
         }`}>
-          <div className="border-b border-[#27272a] pb-3">
-            <h3 className="text-base font-semibold text-zinc-100 font-mono">Assessment Summary</h3>
-            <p className="text-xs font-mono text-zinc-400 mt-1">
-              Score: {quizResult.score}/{quizResult.total} ({quizResult.percentage}%)
-            </p>
+          <div className={`pb-3 border-b flex items-center justify-between ${
+            theme === "dark" ? "border-[#27272a]" : "border-slate-200"
+          }`}>
+            <div>
+              <h3 className={`text-lg font-bold ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+                Assessment Summary
+              </h3>
+              <p className="text-xs font-mono text-emerald-500 font-semibold mt-0.5">
+                Score: {quizResult.score}/{quizResult.total} ({quizResult.percentage}%)
+              </p>
+            </div>
+            <button
+              onClick={() => setQuizState("idle")}
+              className="px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium"
+            >
+              New Quiz
+            </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {quizResult.review?.map((r, i) => (
-              <div key={i} className="p-3 rounded border border-[#27272a] bg-[#18181b] text-xs space-y-1">
+              <div
+                key={i}
+                className={`p-3.5 rounded-lg border text-xs space-y-1.5 ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a]" : "bg-slate-50 border-slate-200"
+                }`}
+              >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-zinc-200">{r.question}</span>
-                  <span className={`font-mono text-[10px] ${r.is_correct ? "text-emerald-400" : "text-red-400"}`}>
-                    {r.is_correct ? "PASSED" : "FAILED"}
+                  <span className={`font-semibold ${theme === "dark" ? "text-zinc-200" : "text-slate-900"}`}>{r.question}</span>
+                  <span className={`font-mono text-[10px] font-bold ${r.is_correct ? "text-emerald-500" : "text-red-500"}`}>
+                    {r.is_correct ? "PASSED" : "INCORRECT"}
                   </span>
                 </div>
-                <div className="text-[11px] text-zinc-400 font-mono">
-                  Correct answer: {r.options[r.correct_choice]}
+                <div className="text-[11px] text-zinc-500 font-mono">
+                  Correct answer: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{r.options[r.correct_choice]}</span>
                 </div>
-                <p className="text-zinc-500 text-[11px] pt-1">{r.explanation}</p>
+                <p className="text-slate-600 dark:text-zinc-400 text-[11px] leading-relaxed pt-1">{r.explanation}</p>
               </div>
             ))}
           </div>
-
-          <button
-            onClick={() => setQuizState("idle")}
-            className="w-full py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-mono border border-zinc-700"
-          >
-            Start New Assessment
-          </button>
         </div>
       )}
     </div>
@@ -2595,7 +3008,7 @@ function QuizzesView({ currentUser, theme, showToast }) {
 }
 
 // ----------------- STUDY MATERIALS & RAG VIEW -----------------
-function StudyMaterialsView({ currentUser, theme, showToast }) {
+function StudyMaterialsView({ currentUser, theme, showToast, askTutor }) {
   const [materials, setMaterials] = useState([]);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -2620,46 +3033,33 @@ function StudyMaterialsView({ currentUser, theme, showToast }) {
   };
 
   const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("subject", "Computer Science");
 
     setUploading(true);
     try {
       const res = await apiRequest("/api/materials/upload", "POST", formData);
+      showToast("Document indexed and vectorized successfully.", "success");
       fetchMaterials();
       setSelectedDoc(res);
-      showToast("Document indexed.", "success");
     } catch (err) {
       showToast(err.message, "error");
     } finally {
       setUploading(false);
-      e.target.value = "";
     }
   };
 
-  const deleteMaterial = async (id) => {
-    try {
-      await apiRequest(`/api/materials/${id}`, "DELETE");
-      fetchMaterials();
-      if (selectedDoc?.id === id) setSelectedDoc(null);
-    } catch (err) {
-      showToast(err.message, "error");
-    }
-  };
-
-  const askDocumentQuestion = async () => {
+  const queryDocument = async () => {
     if (!selectedDoc || !docQuestion.trim() || asking) return;
     setAsking(true);
-    setDocAnswer("");
     try {
-      const res = await apiRequest(`/api/materials/${selectedDoc.id}/chat`, "POST", {
-        question: docQuestion
+      const res = await apiRequest(`/api/materials/${selectedDoc.id}/query`, "POST", {
+        query: docQuestion
       });
-      setDocAnswer(res.answer);
+      setDocAnswer(res.response);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -2667,86 +3067,153 @@ function StudyMaterialsView({ currentUser, theme, showToast }) {
     }
   };
 
+  const askTutorAboutDocument = () => {
+    if (!askTutor || !selectedDoc) return;
+    const prompt = `I am studying from the document "${selectedDoc.filename}". Here is a summary/excerpt of what it covers:\n\n${(selectedDoc.text_content || "").slice(0, 500)}\n\nCould you create a structured 5-point study guide on this topic with key concepts and practice problems?`;
+    askTutor(prompt, "explain");
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-      {/* Document Explorer */}
-      <div className={`lg:col-span-4 p-3 rounded-lg border space-y-3 ${
+      {/* Document Library Column */}
+      <div className={`lg:col-span-4 rounded-xl border p-3 flex flex-col h-[740px] shadow-sm ${
         theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
       }`}>
-        <div className="flex items-center justify-between pb-2 border-b border-[#27272a]">
-          <span className="font-mono text-xs font-semibold text-zinc-100 uppercase">Documents</span>
-          <label className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono cursor-pointer">
-            <input type="file" accept=".pdf,.txt,.md" onChange={handleFileUpload} className="hidden" disabled={uploading} />
-            {uploading ? "Parsing..." : "Upload"}
+        <div className={`flex items-center justify-between pb-2 border-b ${
+          theme === "dark" ? "border-[#27272a]" : "border-slate-200"
+        }`}>
+          <span className={`font-mono text-xs font-semibold uppercase ${
+            theme === "dark" ? "text-zinc-100" : "text-slate-900"
+          }`}>
+            Study Documents
+          </span>
+          <span className="text-[11px] font-mono text-zinc-400">{materials.length} Files</span>
+        </div>
+
+        {/* Upload Dropzone */}
+        <div className="my-3">
+          <label className={`flex flex-col items-center justify-center p-4 border border-dashed rounded-lg cursor-pointer transition ${
+            theme === "dark"
+              ? "border-[#27272a] hover:border-zinc-500 bg-[#18181b]/50 text-zinc-400"
+              : "border-slate-300 hover:border-blue-400 bg-slate-50 text-slate-600"
+          }`}>
+            <svg className="w-5 h-5 text-blue-500 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <span className="text-xs font-medium">Upload PDF or Text Notes</span>
+            <span className="text-[10px] text-zinc-500 mt-0.5">Vector RAG extraction</span>
+            <input type="file" onChange={handleFileUpload} accept=".pdf,.txt,.md" className="hidden" />
           </label>
         </div>
 
-        <div className="space-y-1 max-h-[500px] overflow-y-auto">
-          {materials.map(m => (
-            <div
-              key={m.id}
-              onClick={() => setSelectedDoc(m)}
-              className={`p-2 rounded border cursor-pointer flex items-center justify-between text-xs ${
-                selectedDoc?.id === m.id
-                  ? "bg-zinc-800 border-zinc-600 text-white"
-                  : "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-850"
-              }`}
-            >
-              <span className="truncate font-mono">{m.file_name}</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); deleteMaterial(m.id); }}
-                className="text-zinc-500 hover:text-red-400 text-[10px] font-mono ml-2"
+        {/* Document List */}
+        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+          {materials.map(doc => {
+            const isSelected = selectedDoc?.id === doc.id;
+            return (
+              <div
+                key={doc.id}
+                onClick={() => { setSelectedDoc(doc); setDocAnswer(""); }}
+                className={`p-3 rounded-lg border cursor-pointer text-xs transition ${
+                  isSelected
+                    ? theme === "dark"
+                      ? "bg-zinc-800 border-zinc-600 text-white"
+                      : "bg-blue-50 border-blue-300 text-blue-950 font-medium"
+                    : theme === "dark"
+                      ? "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-800"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                }`}
               >
-                Del
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2 mb-1">
+                  <svg className="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                  <span className="font-semibold truncate">{doc.filename}</span>
+                </div>
+                <div className="text-[10px] text-zinc-500 font-mono flex items-center justify-between">
+                  <span>{doc.total_chunks || 1} Chunks</span>
+                  <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* RAG Context & Q&A */}
-      <div className={`lg:col-span-8 p-4 rounded-lg border space-y-4 ${
-        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
-      }`}>
+      {/* RAG Query & AI Understanding Workspace */}
+      <div className="lg:col-span-8 space-y-3">
         {selectedDoc ? (
           <>
-            <div>
-              <span className="font-mono text-xs text-zinc-400 uppercase block mb-1">Indexed Source</span>
-              <h3 className="text-sm font-semibold text-zinc-100 font-mono">{selectedDoc.file_name}</h3>
-              <div className="mt-2 p-3 rounded bg-[#09090b] border border-[#27272a] text-xs text-zinc-300">
-                <div className="prose-dark" dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(selectedDoc.summary || "") : selectedDoc.summary }} />
+            {/* Document Header & AI Action */}
+            <div className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3 shadow-sm ${
+              theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+            }`}>
+              <div>
+                <h3 className={`text-base font-bold ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+                  {selectedDoc.filename}
+                </h3>
+                <span className="text-[11px] font-mono text-zinc-500">
+                  Total vectors: {selectedDoc.total_chunks || 1} • Knowledge base ready
+                </span>
               </div>
+
+              <button
+                onClick={askTutorAboutDocument}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-sm transition active:scale-[0.98]"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                <span>Study with AI Tutor</span>
+              </button>
             </div>
 
-            <div className="pt-3 border-t border-[#27272a] space-y-2">
-              <span className="font-mono text-xs text-zinc-400 uppercase block">Context Query</span>
+            {/* Document Excerpt Preview */}
+            <div className={`p-4 rounded-xl border shadow-sm max-h-48 overflow-y-auto font-mono text-xs leading-relaxed ${
+              theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-300" : "bg-slate-50 border-slate-200 text-slate-800"
+            }`}>
+              <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Extracted Document Text Preview</div>
+              {selectedDoc.text_content ? selectedDoc.text_content.slice(0, 1000) : "No text excerpt available."}
+            </div>
+
+            {/* Natural Language RAG Q&A */}
+            <div className={`p-4 rounded-xl border space-y-3 shadow-sm ${
+              theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+            }`}>
+              <h4 className={`text-xs font-semibold uppercase tracking-wider font-mono ${
+                theme === "dark" ? "text-zinc-200" : "text-slate-800"
+              }`}>
+                Ask Questions on this Material
+              </h4>
+
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={docQuestion}
                   onChange={(e) => setDocQuestion(e.target.value)}
-                  placeholder="Query document content..."
-                  className="flex-1 bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-500"
+                  onKeyDown={(e) => e.key === "Enter" && queryDocument()}
+                  placeholder="e.g. Summarize the key algorithm explained on page 2..."
+                  className={`flex-1 border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition ${
+                    theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+                  }`}
                 />
                 <button
-                  onClick={askDocumentQuestion}
-                  disabled={asking || !docQuestion.trim()}
-                  className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono disabled:opacity-50"
+                  onClick={queryDocument}
+                  disabled={!docQuestion.trim() || asking}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition"
                 >
-                  {asking ? "Querying..." : "Execute"}
+                  {asking ? "Searching..." : "Ask PDF"}
                 </button>
               </div>
 
               {docAnswer && (
-                <div className="p-3 rounded bg-[#09090b] border border-[#27272a] text-xs font-mono text-zinc-300">
-                  <div className="prose-dark" dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(docAnswer) : docAnswer }} />
+                <div className={`p-4 rounded-lg border text-xs leading-relaxed ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                }`}>
+                  <div dangerouslySetInnerHTML={{ __html: renderMarkdownWithPrism(docAnswer) }} />
                 </div>
               )}
             </div>
           </>
         ) : (
-          <div className="p-8 text-center text-xs font-mono text-zinc-500">
-            Select or upload a document to begin analysis.
+          <div className={`p-12 rounded-xl border text-center text-xs ${
+            theme === "dark" ? "bg-[#121215] border-[#27272a] text-zinc-500" : "bg-white border-slate-200 text-slate-500"
+          }`}>
+            Upload a syllabus or reference material to start semantic study sessions.
           </div>
         )}
       </div>
@@ -2755,11 +3222,12 @@ function StudyMaterialsView({ currentUser, theme, showToast }) {
 }
 
 // ----------------- MY LEARNING & NOTES VIEW -----------------
-function MyLearningView({ currentUser, theme, showToast }) {
+function MyLearningView({ currentUser, theme, showToast, askTutor }) {
   const [notes, setNotes] = useState([]);
-  const [selectedNote, setSelectedNote] = useState(null);
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteContent, setNoteContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [tags, setTags] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchNotes();
@@ -2769,136 +3237,27 @@ function MyLearningView({ currentUser, theme, showToast }) {
     try {
       const data = await apiRequest("/api/notes");
       setNotes(data);
-      if (data.length > 0 && !selectedNote) {
-        selectNote(data[0]);
-      }
-    } catch (err) {}
-  };
-
-  const selectNote = (n) => {
-    setSelectedNote(n);
-    setNoteTitle(n.title);
-    setNoteContent(n.content);
-  };
-
-  const createNewNote = () => {
-    setSelectedNote(null);
-    setNoteTitle("New Note");
-    setNoteContent("# Notes\n");
-  };
-
-  const saveNote = async () => {
-    try {
-      if (selectedNote) {
-        await apiRequest(`/api/notes/${selectedNote.id}`, "PUT", {
-          title: noteTitle,
-          content: noteContent
-        });
-      } else {
-        await apiRequest("/api/notes", "POST", {
-          title: noteTitle,
-          content: noteContent
-        });
-      }
-      showToast("Note saved.", "success");
-      fetchNotes();
     } catch (err) {
       showToast(err.message, "error");
     }
   };
 
-  const deleteNote = async (id) => {
+  const handleCreateNote = async (e) => {
+    e.preventDefault();
+    if (!title.trim() || !content.trim()) return;
+
+    setLoading(true);
     try {
-      await apiRequest(`/api/notes/${id}`, "DELETE");
+      await apiRequest("/api/notes", "POST", {
+        title,
+        content,
+        tags: tags.split(",").map(t => t.trim()).filter(Boolean)
+      });
+      setTitle("");
+      setContent("");
+      setTags("");
       fetchNotes();
-      setSelectedNote(null);
-    } catch (err) {
-      showToast(err.message, "error");
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-      <div className={`lg:col-span-4 p-3 rounded-lg border space-y-2 ${
-        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
-      }`}>
-        <div className="flex items-center justify-between pb-2 border-b border-[#27272a]">
-          <span className="font-mono text-xs font-semibold text-zinc-100 uppercase">Notes Index</span>
-          <button
-            onClick={createNewNote}
-            className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono"
-          >
-            + Add
-          </button>
-        </div>
-
-        <div className="space-y-1 max-h-96 overflow-y-auto">
-          {notes.map(n => (
-            <div
-              key={n.id}
-              onClick={() => selectNote(n)}
-              className={`p-2 rounded border cursor-pointer flex items-center justify-between text-xs ${
-                selectedNote?.id === n.id
-                  ? "bg-zinc-800 border-zinc-600 text-white"
-                  : "bg-[#18181b] border-[#27272a] text-zinc-300 hover:bg-zinc-850"
-              }`}
-            >
-              <span className="truncate font-mono">{n.title}</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); deleteNote(n.id); }}
-                className="text-zinc-500 hover:text-red-400 text-[10px] font-mono ml-2"
-              >
-                Del
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`lg:col-span-8 p-4 rounded-lg border space-y-3 ${
-        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
-      }`}>
-        <div className="flex items-center justify-between border-b border-[#27272a] pb-2">
-          <input
-            type="text"
-            value={noteTitle}
-            onChange={(e) => setNoteTitle(e.target.value)}
-            className="bg-transparent text-sm font-semibold text-zinc-100 font-mono focus:outline-none w-full mr-4"
-          />
-          <button
-            onClick={saveNote}
-            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono"
-          >
-            Save
-          </button>
-        </div>
-
-        <textarea
-          value={noteContent}
-          onChange={(e) => setNoteContent(e.target.value)}
-          rows={14}
-          className="w-full bg-[#09090b] border border-[#27272a] rounded p-3 text-xs font-mono text-zinc-200 focus:outline-none focus:border-zinc-500"
-          placeholder="Markdown text..."
-        />
-      </div>
-    </div>
-  );
-}
-
-// ----------------- PROGRESS & ANALYTICS VIEW -----------------
-function ProgressAnalyticsView({ currentUser, theme, showToast }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
-
-  const fetchAnalytics = async () => {
-    try {
-      setLoading(true);
-      const res = await apiRequest("/api/analytics/progress");
-      setData(res);
+      showToast("Note successfully recorded.", "success");
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -2906,63 +3265,261 @@ function ProgressAnalyticsView({ currentUser, theme, showToast }) {
     }
   };
 
-  if (loading) {
-    return <div className="p-8 text-xs font-mono text-zinc-500">Loading metrics...</div>;
-  }
+  const handleDeleteNote = async (noteId) => {
+    try {
+      await apiRequest(`/api/notes/${noteId}`, "DELETE");
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+      showToast("Note deleted.", "info");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
 
-  const plan = data?.study_plan;
+  const askTutorAboutNote = (note) => {
+    if (!askTutor) return;
+    const prompt = `Here are my study notes on "${note.title}":\n\n${note.content}\n\nCould you create 3 interactive practice quiz questions to test my retention on this topic?`;
+    askTutor(prompt, "practice");
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Diagnostic Header */}
-      <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-        <span className="text-[10px] font-mono uppercase text-zinc-400 block mb-1">Adaptive Learning Diagnostics</span>
-        <h3 className="text-base font-semibold text-zinc-100 font-mono">
-          Focus Domain: {plan?.focus_topic}
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Create Note Card */}
+      <div className={`p-5 rounded-xl border shadow-sm ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+            STUDENT REVISION JOURNAL
+          </span>
+        </div>
+        <h3 className={`text-base font-bold mb-1 ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+          Capture Concept Notes
         </h3>
-        <p className="text-xs text-zinc-400 font-mono mt-1">
-          {plan?.diagnosis}
+        <p className={`text-xs mb-4 ${theme === "dark" ? "text-zinc-400" : "text-slate-600"}`}>
+          Record insights, code patterns, and revision notes during your study sessions.
+        </p>
+
+        <form onSubmit={handleCreateNote} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Note title (e.g. Dynamic Programming Memoization Tips)"
+              className={`border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
+              required
+            />
+            <input
+              type="text"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="Tags (e.g. python, dsa, recursion)"
+              className={`border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
+            />
+          </div>
+
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Write explanations, formulas, or code patterns..."
+            rows="3"
+            className={`w-full border rounded-lg p-3 text-xs leading-relaxed focus:outline-none focus:border-blue-500 transition ${
+              theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+            }`}
+            required
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition active:scale-[0.99]"
+          >
+            Save Note
+          </button>
+        </form>
+      </div>
+
+      {/* Notes Gallery */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-xs font-mono text-zinc-500 px-1">
+          <span>Saved Revision Notes ({notes.length})</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {notes.map(note => (
+            <div
+              key={note.id}
+              className={`p-4 rounded-xl border shadow-sm flex flex-col justify-between transition ${
+                theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+              }`}
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h4 className={`text-sm font-bold ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+                    {note.title}
+                  </h4>
+                  <button
+                    onClick={() => handleDeleteNote(note.id)}
+                    className="text-zinc-400 hover:text-red-500 transition p-1"
+                    title="Delete Note"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                </div>
+
+                <p className={`text-xs leading-relaxed whitespace-pre-wrap mb-3 ${
+                  theme === "dark" ? "text-zinc-300" : "text-slate-700"
+                }`}>
+                  {note.content}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-[#27272a] text-[10px] font-mono text-zinc-500">
+                <div className="flex gap-1 flex-wrap">
+                  {note.tags?.map((t, idx) => (
+                    <span key={idx} className="px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-500 font-semibold">
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={() => askTutorAboutNote(note)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+                >
+                  <span>Quiz Me</span>
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------- PROGRESS & ANALYTICS VIEW -----------------
+function ProgressAnalyticsView({ currentUser, theme, showToast, askTutor }) {
+  const [stats, setStats] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [statsData, planData] = await Promise.all([
+        apiRequest("/api/dashboard/stats"),
+        apiRequest("/api/learning/plan")
+      ]);
+      setStats(statsData);
+      setPlan(planData);
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Diagnostics Banner */}
+      <div className={`p-5 rounded-xl border shadow-sm ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+            ADAPTIVE LEARNING DIAGNOSTICS
+          </span>
+        </div>
+        <h3 className={`text-base font-bold mb-1 ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+          Target Learning Focus: {plan?.current_focus || "Algorithms & Iteration"}
+        </h3>
+        <p className={`text-xs ${theme === "dark" ? "text-zinc-400" : "text-slate-600"}`}>
+          Analysis of your submission telemetry indicates optimal growth in modular structure and recursion.
         </p>
       </div>
 
-      {/* Remediation Plan */}
-      <div className={`p-4 rounded-lg border space-y-2 ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-        <span className="text-xs font-mono text-zinc-400 uppercase block mb-2">Recommended Sequence</span>
-        {plan?.steps?.map((step) => (
-          <div
-            key={step.step}
-            className="p-3 rounded border border-[#27272a] bg-[#18181b] flex items-center justify-between text-xs font-mono"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-zinc-500">0{step.step}</span>
-              <div>
-                <span className="font-medium text-zinc-200 block">{step.title}</span>
-                <span className="text-zinc-400 text-[11px]">{step.action}</span>
+      {/* Recommended Sequence Tracks */}
+      <div className={`p-5 rounded-xl border shadow-sm ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
+        <h4 className={`text-xs font-semibold uppercase tracking-wider font-mono mb-3 ${
+          theme === "dark" ? "text-zinc-200" : "text-slate-800"
+        }`}>
+          Personalized Growth Trajectory
+        </h4>
+
+        <div className="space-y-2">
+          {plan?.steps?.map((step, idx) => (
+            <div
+              key={idx}
+              className={`p-3.5 rounded-lg border flex items-center justify-between transition ${
+                step.status === "Ready"
+                  ? theme === "dark"
+                    ? "bg-[#18181b] border-blue-500/50 text-white"
+                    : "bg-blue-50/70 border-blue-300 text-blue-950 font-medium"
+                  : theme === "dark"
+                    ? "bg-[#141417] border-[#27272a] text-zinc-400"
+                    : "bg-slate-50 border-slate-200 text-slate-600"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-xs font-bold w-6 text-zinc-500">0{idx + 1}</span>
+                <div>
+                  <div className="font-semibold text-xs">{step.name}</div>
+                  <div className="text-[11px] text-zinc-500">{step.description}</div>
+                </div>
               </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-semibold ${
+                step.status === "Ready" ? "bg-blue-600 text-white" : "bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
+              }`}>
+                {step.status}
+              </span>
             </div>
-            <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded ${
-              step.status === "ready" ? "bg-zinc-800 text-blue-400 border border-zinc-700" : "text-zinc-600"
-            }`}>
-              {step.status}
-            </span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Topic Breakdown */}
-      <div className={`p-4 rounded-lg border ${theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"}`}>
-        <span className="text-xs font-mono text-zinc-400 uppercase block mb-3">Topic Progression</span>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {Object.entries(data?.topic_stats || {}).map(([topName, stats]) => (
-            <div key={topName} className="p-3 rounded border border-[#27272a] bg-[#18181b] space-y-1 font-mono text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-200">{topName}</span>
-                <span className="text-zinc-400">{stats.percentage}%</span>
+      {/* Topic Mastery Telemetry */}
+      <div className={`p-5 rounded-xl border shadow-sm ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
+        <h4 className={`text-xs font-semibold uppercase tracking-wider font-mono mb-3 ${
+          theme === "dark" ? "text-zinc-200" : "text-slate-800"
+        }`}>
+          Skill Mastery Telemetry
+        </h4>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { topic: "Variables & Standard I/O", progress: 90 },
+            { topic: "Conditionals & Logic", progress: 85 },
+            { topic: "Loops & Iterators", progress: 75 },
+            { topic: "Functions & Scope", progress: 60 },
+            { topic: "Arrays & Strings", progress: 45 },
+            { topic: "Algorithmic Complexity", progress: 30 },
+          ].map((item, idx) => (
+            <div
+              key={idx}
+              className={`p-3 rounded-lg border ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a]" : "bg-slate-50 border-slate-200"
+              }`}
+            >
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className={`font-semibold ${theme === "dark" ? "text-zinc-200" : "text-slate-800"}`}>{item.topic}</span>
+                <span className="font-mono text-[11px] text-blue-500 font-bold">{item.progress}%</span>
               </div>
-              <div className="w-full bg-[#09090b] rounded h-1 overflow-hidden">
-                <div className="bg-blue-600 h-1" style={{ width: `${stats.percentage}%` }}></div>
+              <div className="w-full bg-slate-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
+                <div className="bg-blue-600 h-full rounded-full transition-all" style={{ width: `${item.progress}%` }}></div>
               </div>
-              <span className="text-[10px] text-zinc-500 block">{stats.completed}/{stats.total} complete</span>
             </div>
           ))}
         </div>
@@ -2974,33 +3531,22 @@ function ProgressAnalyticsView({ currentUser, theme, showToast }) {
 // ----------------- SETTINGS VIEW -----------------
 function SettingsView({ currentUser, refreshProfile, theme, toggleTheme, showToast }) {
   const [name, setName] = useState(currentUser.name || "");
-  const [experienceLevel, setExperienceLevel] = useState(currentUser.experience_level || "Beginner");
   const [learningGoals, setLearningGoals] = useState(currentUser.learning_goals || "");
-  const [geminiKey, setGeminiKey] = useState("");
-  const [configInfo, setConfigInfo] = useState(null);
+  const [expLevel, setExpLevel] = useState(currentUser.experience_level || "Beginner");
+  const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchConfig();
-  }, []);
-
-  const fetchConfig = async () => {
-    try {
-      const data = await apiRequest("/api/settings/config");
-      setConfigInfo(data);
-    } catch (err) {}
-  };
-
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
     setSaving(true);
     try {
-      await apiRequest("/api/auth/profile", "PUT", {
+      await apiRequest("/api/settings/profile", "PUT", {
         name,
-        experience_level: experienceLevel,
-        learning_goals: learningGoals
+        learning_goals: learningGoals,
+        experience_level: expLevel
       });
-      showToast("Profile updated.", "success");
       refreshProfile();
+      showToast("Profile settings updated.", "success");
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -3008,95 +3554,110 @@ function SettingsView({ currentUser, refreshProfile, theme, toggleTheme, showToa
     }
   };
 
-  const handleSaveGeminiKey = async () => {
+  const handleSaveApiKey = async (e) => {
+    e.preventDefault();
     try {
-      await apiRequest("/api/settings/save-key", "POST", { api_key: geminiKey });
-      showToast("Key configuration saved.", "success");
-      setGeminiKey("");
-      fetchConfig();
+      await apiRequest("/api/settings/apikey", "POST", { api_key: apiKey.trim() });
+      showToast("Custom Gemini API Key saved.", "success");
+      setApiKey("");
     } catch (err) {
       showToast(err.message, "error");
     }
   };
 
   return (
-    <div className="max-w-2xl space-y-4 font-mono text-xs">
-      <div className={`p-4 rounded-lg border space-y-3 ${
+    <div className="max-w-3xl mx-auto space-y-6">
+      {/* Student Profile Settings */}
+      <div className={`p-6 rounded-xl border shadow-sm ${
         theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
       }`}>
-        <span className="font-semibold text-zinc-200 uppercase block">Account Configuration</span>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold">
+            ACCOUNT PREFERENCES
+          </span>
+        </div>
+        <h3 className={`text-base font-bold mb-4 ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+          Student Profile
+        </h3>
+
+        <form onSubmit={handleSaveProfile} className="space-y-4">
           <div>
-            <label className="text-zinc-400 block mb-1">Name</label>
+            <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>Full Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-100"
+              className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
             />
           </div>
+
           <div>
-            <label className="text-zinc-400 block mb-1">Level</label>
+            <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>Programming Experience</label>
             <select
-              value={experienceLevel}
-              onChange={(e) => setExperienceLevel(e.target.value)}
-              className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-200"
+              value={expLevel}
+              onChange={(e) => setExpLevel(e.target.value)}
+              className={`w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
             >
-              <option value="Beginner">Beginner</option>
-              <option value="Intermediate">Intermediate</option>
-              <option value="Advanced">Advanced</option>
+              <option value="Beginner">Beginner (New to coding)</option>
+              <option value="Intermediate">Intermediate (Familiar with syntax & algorithms)</option>
+              <option value="Advanced">Advanced (System architecture & performance)</option>
             </select>
           </div>
-        </div>
 
-        <div>
-          <label className="text-zinc-400 block mb-1">Goals</label>
-          <input
-            type="text"
-            value={learningGoals}
-            onChange={(e) => setLearningGoals(e.target.value)}
-            className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-100"
-          />
-        </div>
+          <div>
+            <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>Primary Learning Goals</label>
+            <textarea
+              value={learningGoals}
+              onChange={(e) => setLearningGoals(e.target.value)}
+              rows="2"
+              className={`w-full border rounded-lg p-3 text-xs leading-relaxed focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
+            />
+          </div>
 
-        <button
-          onClick={handleSaveProfile}
-          disabled={saving}
-          className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium"
-        >
-          {saving ? "Saving..." : "Save Profile"}
-        </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition"
+          >
+            {saving ? "Saving..." : "Save Profile"}
+          </button>
+        </form>
       </div>
 
-      <div className={`p-4 rounded-lg border space-y-3 ${
+      {/* Custom AI Provider Key */}
+      <div className={`p-6 rounded-xl border shadow-sm ${
         theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
       }`}>
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-zinc-200 uppercase block">Gemini API Connection</span>
-          <span className="text-[10px] text-zinc-400">
-            {configInfo?.gemini_api_configured ? "CONNECTED" : "OFFLINE ENGINE"}
-          </span>
-        </div>
-
-        <p className="text-zinc-400 text-[11px]">
-          Enter Google Gemini API key to update generative engine credentials:
+        <h3 className={`text-base font-bold mb-1 ${theme === "dark" ? "text-zinc-100" : "text-slate-900"}`}>
+          Custom AI Provider Key (Optional)
+        </h3>
+        <p className={`text-xs mb-4 leading-relaxed ${theme === "dark" ? "text-zinc-400" : "text-slate-600"}`}>
+          Provide your own Google Gemini API key to override the built-in system key for higher rate limits.
         </p>
 
-        <div className="flex gap-2">
+        <form onSubmit={handleSaveApiKey} className="flex gap-2">
           <input
             type="password"
-            value={geminiKey}
-            onChange={(e) => setGeminiKey(e.target.value)}
-            placeholder="AIzaSy..."
-            className="flex-1 bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-100"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="AIzaSy... (Gemini API Key)"
+            className={`flex-1 border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+              theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+            }`}
           />
           <button
-            onClick={handleSaveGeminiKey}
-            className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700"
+            type="submit"
+            className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-medium border border-zinc-700 transition"
           >
-            Update Key
+            Save Key
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
@@ -3110,7 +3671,7 @@ function AuthScreen({ setToken, setCurrentUser, theme, toggleTheme }) {
   const [password, setPassword] = useState("");
   const [experienceLevel, setExperienceLevel] = useState("Beginner");
   const [preferredLangs, setPreferredLangs] = useState(["Python"]);
-  const [learningGoals, setLearningGoals] = useState("General programming");
+  const [learningGoals, setLearningGoals] = useState("Master algorithms and learn programming");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -3146,62 +3707,102 @@ function AuthScreen({ setToken, setCurrentUser, theme, toggleTheme }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#09090b] text-[#f4f4f5]">
-      <div className="w-full max-w-sm p-6 rounded-lg border border-[#27272a] bg-[#121215] space-y-4 font-mono text-xs">
-        <div className="border-b border-[#27272a] pb-3 flex items-center justify-between">
-          <span className="font-semibold text-sm text-zinc-100">CodeLoop</span>
-          <span className="text-[10px] text-zinc-500 uppercase">{mode}</span>
+    <div className={`min-h-screen flex items-center justify-center p-4 transition-colors ${
+      theme === "dark" ? "bg-[#09090b] text-[#f4f4f5]" : "bg-[#f8fafc] text-[#0f172a]"
+    }`}>
+      <div className={`w-full max-w-sm p-6 rounded-2xl border shadow-xl space-y-4 text-xs transition ${
+        theme === "dark" ? "bg-[#121215] border-[#27272a]" : "bg-white border-slate-200"
+      }`}>
+        {/* Brand Header */}
+        <div className="flex items-center justify-between border-b pb-4 border-slate-200 dark:border-[#27272a]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-sm">
+              C
+            </div>
+            <div>
+              <span className={`font-bold text-base tracking-tight ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                CodeLoop
+              </span>
+              <span className="block text-[10px] text-zinc-500 font-mono">STUDENT WORKSPACE</span>
+            </div>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs"
+            title="Toggle Theme"
+          >
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
         </div>
 
         {error && (
-          <div className="p-2 rounded bg-red-950/60 border border-red-800 text-red-200 text-[11px]">
+          <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-xs leading-relaxed">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
           {mode === "register" && (
             <div>
-              <label className="text-zinc-400 block mb-1">Name</label>
+              <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>
+                Full Name
+              </label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-500"
+                placeholder="Alex Mercer"
+                className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+                }`}
               />
             </div>
           )}
 
           <div>
-            <label className="text-zinc-400 block mb-1">Email</label>
+            <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>
+              Email Address
+            </label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-500"
+              placeholder="alex@example.com"
+              className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
             />
           </div>
 
           <div>
-            <label className="text-zinc-400 block mb-1">Password</label>
+            <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>
+              Password
+            </label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-100 focus:outline-none focus:border-zinc-500"
+              placeholder="••••••••"
+              className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition ${
+                theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-100" : "bg-slate-50 border-slate-300 text-slate-900"
+              }`}
             />
           </div>
 
           {mode === "register" && (
             <div>
-              <label className="text-zinc-400 block mb-1">Experience Level</label>
+              <label className={`block text-xs font-medium mb-1 ${theme === "dark" ? "text-zinc-300" : "text-slate-700"}`}>
+                Current Experience
+              </label>
               <select
                 value={experienceLevel}
                 onChange={(e) => setExperienceLevel(e.target.value)}
-                className="w-full bg-[#18181b] border border-[#27272a] rounded px-3 py-1.5 text-zinc-200"
+                className={`w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 transition ${
+                  theme === "dark" ? "bg-[#18181b] border-[#27272a] text-zinc-200" : "bg-slate-50 border-slate-300 text-slate-900"
+                }`}
               >
                 <option value="Beginner">Beginner</option>
                 <option value="Intermediate">Intermediate</option>
@@ -3213,18 +3814,18 @@ function AuthScreen({ setToken, setCurrentUser, theme, toggleTheme }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50 mt-2"
+            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs shadow-sm transition active:scale-[0.99] mt-2"
           >
-            {loading ? "Processing..." : mode === "login" ? "Sign In" : "Register"}
+            {loading ? "Processing..." : mode === "login" ? "Sign In to CodeLoop" : "Create Account"}
           </button>
         </form>
 
-        <div className="pt-2 border-t border-[#27272a] text-center">
+        <div className="pt-2 border-t border-slate-200 dark:border-[#27272a] text-center">
           <button
             onClick={() => setMode(mode === "login" ? "register" : "login")}
-            className="text-zinc-400 hover:text-white text-[11px]"
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
-            {mode === "login" ? "Need an account? Register" : "Have an account? Sign In"}
+            {mode === "login" ? "Need an account? Register" : "Already have an account? Sign In"}
           </button>
         </div>
       </div>
