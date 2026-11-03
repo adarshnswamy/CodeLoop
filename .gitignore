@@ -1,0 +1,24 @@
+# Secrets and local environment
+.env
+.env.local
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Local SQLite databases
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Uploaded documents
+uploads/*
+!uploads/.gitkeep
+
+# Vercel and IDE
+.vercel/
+.idea/
+.vscode/
