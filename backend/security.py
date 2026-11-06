@@ -92,3 +92,11 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> str:
         pass
 
     return user_id
+
+def get_optional_user_id(authorization: Optional[str] = Header(None)) -> Optional[str]:
+    if not authorization:
+        return None
+    try:
+        return get_current_user_id(authorization)
+    except HTTPException:
+        return None

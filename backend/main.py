@@ -21,7 +21,8 @@ from security import (
     hash_password,
     verify_password,
     create_session_token,
-    get_current_user_id
+    get_current_user_id,
+    get_optional_user_id
 )
 from executor import run_code
 from practice_data import PRACTICE_PROBLEMS, get_problem_by_id
@@ -149,7 +150,8 @@ class NoteUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
 class DocumentChatRequest(BaseModel):
-    question: str
+    question: Optional[str] = None
+    query: Optional[str] = None
 
 class SaveKeyRequest(BaseModel):
     api_key: str
@@ -337,6 +339,7 @@ def get_profile(user_id: str = Depends(get_current_user_id)):
     }
 
 @app.put("/api/auth/profile")
+@app.put("/api/settings/profile")
 def update_profile(req: UpdateProfileRequest, user_id: str = Depends(get_current_user_id)):
     conn = get_db()
     cursor = conn.cursor()
@@ -361,7 +364,38 @@ def update_profile(req: UpdateProfileRequest, user_id: str = Depends(get_current
 
 # ----------------- DASHBOARD ROUTE -----------------
 @app.get("/api/dashboard/stats")
-def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
+def get_dashboard_stats(user_id: Optional[str] = Depends(get_optional_user_id)):
+    if not user_id:
+        return {
+            "student_name": "Guest Developer",
+            "is_guest": True,
+            "experience_level": "Beginner",
+            "total_coding_sessions": 0,
+            "problems_solved": 0,
+            "quiz_performance_pct": 0,
+            "learning_streak": 1,
+            "saved_programs_count": 0,
+            "daily_goal": {
+                "target": 3,
+                "completed": 0,
+                "percentage": 0
+            },
+            "continue_learning": {
+                "title": "Practice Zone: Sum of Two Numbers",
+                "type": "Practice",
+                "problem_id": "py-01",
+                "progress_label": "Next challenge ready"
+            },
+            "recent_activities": [],
+            "saved_programs": [],
+            "recommended_next_topics": [
+                {"title": "Mastering Python Loops & Iterators", "difficulty": "Beginner", "category": "Loops"},
+                {"title": "Writing Modular & Reusable Functions", "difficulty": "Intermediate", "category": "Functions"},
+                {"title": "Array Transformations & Two Pointers", "difficulty": "Intermediate", "category": "Arrays"},
+                {"title": "Algorithmic Complexity & Big-O", "difficulty": "Advanced", "category": "Algorithms"}
+            ]
+        }
+
     conn = get_db()
     cursor = conn.cursor()
 
@@ -443,7 +477,7 @@ def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
 
 # ----------------- CODE EXECUTION & PROGRAMS -----------------
 @app.post("/api/execute")
-def execute_code(req: ExecuteRequest, user_id: str = Depends(get_current_user_id)):
+def execute_code(req: ExecuteRequest, user_id: Optional[str] = Depends(get_optional_user_id)):
     try:
         result = run_code(req.language, req.code, req.stdin or "")
     except Exception as e:
@@ -457,28 +491,29 @@ def execute_code(req: ExecuteRequest, user_id: str = Depends(get_current_user_id
             "engine": "fallback"
         }
 
-    # Save to coding history safely (never fail response if logging fails)
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("""
-        INSERT INTO coding_history (id, user_id, program_id, language, code, status, output, execution_time_ms, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            str(uuid.uuid4()),
-            user_id,
-            req.program_id,
-            req.language,
-            req.code,
-            result.get("status", "Success"),
-            result.get("stdout", "") or result.get("stderr", ""),
-            result.get("execution_time_ms", 0),
-            datetime.now().isoformat()
-        ))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        pass
+    # Save to coding history safely for logged-in users (never fail response if logging fails)
+    if user_id:
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT INTO coding_history (id, user_id, program_id, language, code, status, output, execution_time_ms, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                str(uuid.uuid4()),
+                user_id,
+                req.program_id,
+                req.language,
+                req.code,
+                result.get("status", "Success"),
+                result.get("stdout", "") or result.get("stderr", ""),
+                result.get("execution_time_ms", 0),
+                datetime.now().isoformat()
+            ))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
     return result
 
@@ -576,26 +611,31 @@ def ai_assistant_chat(req: AIChatRequest, user_id: str = Depends(get_current_use
     return {"response": reply}
 
 @app.post("/api/ai/tutor")
-def ai_tutor(req: TutorRequest, user_id: str = Depends(get_current_user_id)):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT experience_level FROM users WHERE id = ?", (user_id,))
-    row = cursor.fetchone()
-    skill_level = row["experience_level"] if row else "Beginner"
-    conn.close()
+def ai_tutor(req: TutorRequest, user_id: Optional[str] = Depends(get_optional_user_id)):
+    skill_level = "Beginner"
+    api_key = None
+    if user_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT experience_level FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        skill_level = row["experience_level"] if row else "Beginner"
+        conn.close()
+        api_key = USER_CUSTOM_KEYS.get(user_id)
 
-    api_key = USER_CUSTOM_KEYS.get(user_id)
     reply = PedagogicalEngine.answer_tutor_query(req.query, req.mode, skill_level, api_key)
     return {"response": reply, "mode": req.mode}
 
 # ----------------- PRACTICE ZONE -----------------
 @app.get("/api/practice/problems")
-def list_practice_problems(user_id: str = Depends(get_current_user_id)):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT problem_id, status FROM practice_submissions WHERE user_id = ? AND status = 'Accepted'", (user_id,))
-    solved = {r["problem_id"] for r in cursor.fetchall()}
-    conn.close()
+def list_practice_problems(user_id: Optional[str] = Depends(get_optional_user_id)):
+    solved = set()
+    if user_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT problem_id, status FROM practice_submissions WHERE user_id = ? AND status = 'Accepted'", (user_id,))
+        solved = {r["problem_id"] for r in cursor.fetchall()}
+        conn.close()
 
     items = []
     for p in PRACTICE_PROBLEMS:
@@ -610,7 +650,7 @@ def list_practice_problems(user_id: str = Depends(get_current_user_id)):
     return items
 
 @app.get("/api/practice/problems/{problem_id}")
-def get_practice_problem(problem_id: str, user_id: str = Depends(get_current_user_id)):
+def get_practice_problem(problem_id: str, user_id: Optional[str] = Depends(get_optional_user_id)):
     p = get_problem_by_id(problem_id)
     if not p:
         raise HTTPException(status_code=404, detail="Problem not found.")
@@ -630,7 +670,7 @@ def get_practice_problem(problem_id: str, user_id: str = Depends(get_current_use
     }
 
 @app.get("/api/practice/problems/{problem_id}/hint/{level}")
-def get_problem_hint(problem_id: str, level: int, user_id: str = Depends(get_current_user_id)):
+def get_problem_hint(problem_id: str, level: int, user_id: Optional[str] = Depends(get_optional_user_id)):
     p = get_problem_by_id(problem_id)
     if not p:
         raise HTTPException(status_code=404, detail="Problem not found.")
@@ -645,7 +685,7 @@ def get_problem_hint(problem_id: str, level: int, user_id: str = Depends(get_cur
     }
 
 @app.post("/api/practice/submit")
-def submit_practice_problem(req: PracticeSubmitRequest, user_id: str = Depends(get_current_user_id)):
+def submit_practice_problem(req: PracticeSubmitRequest, user_id: Optional[str] = Depends(get_optional_user_id)):
     p = get_problem_by_id(req.problem_id)
     if not p:
         raise HTTPException(status_code=404, detail="Problem not found.")
@@ -664,7 +704,6 @@ def submit_practice_problem(req: PracticeSubmitRequest, user_id: str = Depends(g
         if is_passed:
             passed += 1
 
-        # Only reveal input/output for sample test cases, hide details for hidden cases
         is_sample = (i < len(p["sample_cases"]))
         results.append({
             "case_number": i + 1,
@@ -678,51 +717,57 @@ def submit_practice_problem(req: PracticeSubmitRequest, user_id: str = Depends(g
 
     status_str = "Accepted" if passed == len(all_cases) else "Wrong Answer"
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-    INSERT INTO practice_submissions (id, user_id, problem_id, language, code, status, passed_tests, total_tests, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        str(uuid.uuid4()),
-        user_id,
-        req.problem_id,
-        req.language,
-        req.code,
-        status_str,
-        passed,
-        len(all_cases),
-        datetime.now().isoformat()
-    ))
-
-    # Update student progress
-    if status_str == "Accepted":
-        cursor.execute("SELECT * FROM learning_progress WHERE user_id = ?", (user_id,))
-        prog = cursor.fetchone()
-        if prog:
-            new_solved = prog["problems_solved"] + 1
-            new_daily = prog["daily_goal_completed"] + 1
+    # Only record to persistent progress if logged in
+    if user_id:
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
             cursor.execute("""
-            UPDATE learning_progress 
-            SET problems_solved = ?, daily_goal_completed = ?
-            WHERE user_id = ?
-            """, (new_solved, new_daily, user_id))
+            INSERT INTO practice_submissions (id, user_id, problem_id, language, code, status, passed_tests, total_tests, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                str(uuid.uuid4()),
+                user_id,
+                req.problem_id,
+                req.language,
+                req.code,
+                status_str,
+                passed,
+                len(all_cases),
+                datetime.now().isoformat()
+            ))
 
-    conn.commit()
-    conn.close()
+            # Update student progress
+            if status_str == "Accepted":
+                cursor.execute("SELECT * FROM learning_progress WHERE user_id = ?", (user_id,))
+                prog = cursor.fetchone()
+                if prog:
+                    new_solved = prog["problems_solved"] + 1
+                    new_daily = prog["daily_goal_completed"] + 1
+                    cursor.execute("""
+                    UPDATE learning_progress 
+                    SET problems_solved = ?, daily_goal_completed = ?
+                    WHERE user_id = ?
+                    """, (new_solved, new_daily, user_id))
+
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
     return {
         "status": status_str,
         "passed_tests": passed,
         "total_tests": len(all_cases),
         "results": results,
+        "is_guest": user_id is None,
         "explanation": f"Passed {passed} of {len(all_cases)} test cases." + (" All constraints verified." if status_str == "Accepted" else " Boundary conditions failed.")
     }
 
 # ----------------- QUIZZES -----------------
 @app.post("/api/quizzes/generate")
-def generate_quiz_endpoint(req: QuizGenerateRequest, user_id: str = Depends(get_current_user_id)):
-    api_key = USER_CUSTOM_KEYS.get(user_id)
+def generate_quiz_endpoint(req: QuizGenerateRequest, user_id: Optional[str] = Depends(get_optional_user_id)):
+    api_key = USER_CUSTOM_KEYS.get(user_id) if user_id else None
     questions = PedagogicalEngine.generate_quiz(req.topic, req.language, req.difficulty, api_key)
     return {
         "topic": req.topic,
@@ -732,7 +777,7 @@ def generate_quiz_endpoint(req: QuizGenerateRequest, user_id: str = Depends(get_
     }
 
 @app.post("/api/quizzes/submit")
-def submit_quiz_endpoint(req: QuizSubmitRequest, user_id: str = Depends(get_current_user_id)):
+def submit_quiz_endpoint(req: QuizSubmitRequest, user_id: Optional[str] = Depends(get_optional_user_id)):
     score = 0
     total = len(req.questions)
     detailed_review = []
@@ -758,35 +803,39 @@ def submit_quiz_endpoint(req: QuizSubmitRequest, user_id: str = Depends(get_curr
             "explanation": q.get("explanation", "")
         })
 
-    conn = get_db()
-    cursor = conn.cursor()
-    quiz_id = str(uuid.uuid4())
-    cursor.execute("""
-    INSERT INTO quiz_results (id, user_id, topic, language, difficulty, score, total_questions, answers_json, weak_topics_json, attempt_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        quiz_id,
-        user_id,
-        req.topic,
-        req.language,
-        req.difficulty,
-        score,
-        total,
-        json.dumps(req.answers),
-        json.dumps(list(set(weak_topics))),
-        datetime.now().isoformat()
-    ))
+    # Save to persistent quiz results only if user is logged in
+    if user_id:
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            quiz_id = str(uuid.uuid4())
+            cursor.execute("""
+            INSERT INTO quiz_results (id, user_id, topic, language, difficulty, score, total_questions, answers_json, weak_topics_json, attempt_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                quiz_id,
+                user_id,
+                req.topic,
+                req.language,
+                req.difficulty,
+                score,
+                total,
+                json.dumps(req.answers),
+                json.dumps(list(set(weak_topics))),
+                datetime.now().isoformat()
+            ))
 
-    # Update weak topics in learning progress
-    cursor.execute("SELECT weak_topics FROM learning_progress WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    if row:
-        curr_weak = json.loads(row["weak_topics"] or "[]")
-        updated_weak = list(set(curr_weak + weak_topics))
-        cursor.execute("UPDATE learning_progress SET weak_topics = ? WHERE user_id = ?", (json.dumps(updated_weak), user_id))
+            cursor.execute("SELECT weak_topics FROM learning_progress WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            if row:
+                curr_weak = json.loads(row["weak_topics"] or "[]")
+                updated_weak = list(set(curr_weak + weak_topics))
+                cursor.execute("UPDATE learning_progress SET weak_topics = ? WHERE user_id = ?", (json.dumps(updated_weak), user_id))
 
-    conn.commit()
-    conn.close()
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
     return {
         "quiz_id": quiz_id,
@@ -913,6 +962,7 @@ def delete_material(mat_id: str, user_id: str = Depends(get_current_user_id)):
     return {"message": "Document deleted."}
 
 @app.post("/api/materials/{mat_id}/chat")
+@app.post("/api/materials/{mat_id}/query")
 def chat_with_material(mat_id: str, req: DocumentChatRequest, user_id: str = Depends(get_current_user_id)):
     conn = get_db()
     cursor = conn.cursor()
@@ -925,12 +975,13 @@ def chat_with_material(mat_id: str, req: DocumentChatRequest, user_id: str = Dep
 
     doc_text = doc["extracted_content"][:4000]
     api_key = USER_CUSTOM_KEYS.get(user_id)
+    question_text = req.question or req.query or "Summarize the key takeaways of this document."
 
     prompt = f"""You are answering a student's question based strictly on their uploaded document '{doc['file_name']}'.
 Document Text:
 \"\"\"{doc_text}\"\"\"
 
-Student Question: {req.question}
+Student Question: {question_text}
 
 Instructions:
 1. Prioritize information from the uploaded document. Clearly cite or quote relevant parts.
@@ -938,17 +989,16 @@ Instructions:
 
     gemini_res = call_gemini_api(prompt, "You are a precise study assistant grounded strictly in document materials.", api_key)
     if gemini_res:
-        return {"answer": gemini_res}
+        return {"answer": gemini_res, "response": gemini_res}
 
-    return {
-        "answer": f"""### Document Reference: {doc['file_name']}
+    ans = f"""### Document Reference: {doc['file_name']}
 
 **Reference excerpt:**
-> The uploaded material describes core principles, definitions, and syntax specific to '{req.question}'.
+> The uploaded material describes core principles, definitions, and syntax specific to '{question_text}'.
 
 **Context:**
 Review and test these patterns directly in the Code Editor."""
-    }
+    return {"answer": ans, "response": ans}
 
 # ----------------- NOTES -----------------
 @app.get("/api/notes")
@@ -1013,7 +1063,28 @@ def delete_note(note_id: str, user_id: str = Depends(get_current_user_id)):
 
 # ----------------- SMART LEARNING & PROGRESS ANALYTICS -----------------
 @app.get("/api/analytics/progress")
-def get_progress_analytics(user_id: str = Depends(get_current_user_id)):
+def get_progress_analytics(user_id: Optional[str] = Depends(get_optional_user_id)):
+    if not user_id:
+        study_plan = PedagogicalEngine.generate_smart_study_plan({
+            "weak_topics": [],
+            "accuracy": 0.0,
+            "experience_level": "Beginner"
+        })
+        return {
+            "streak_days": 1,
+            "problems_solved": 0,
+            "weak_topics": [],
+            "topic_stats": {
+                "Variables & I/O": {"completed": 0, "total": 2, "percentage": 0},
+                "Conditionals": {"completed": 0, "total": 2, "percentage": 0},
+                "Loops": {"completed": 0, "total": 3, "percentage": 0},
+                "Functions": {"completed": 0, "total": 2, "percentage": 0},
+                "Strings": {"completed": 0, "total": 2, "percentage": 0},
+                "Arrays/Lists": {"completed": 0, "total": 2, "percentage": 0}
+            },
+            "study_plan": study_plan
+        }
+
     conn = get_db()
     cursor = conn.cursor()
 
@@ -1053,6 +1124,16 @@ def get_progress_analytics(user_id: str = Depends(get_current_user_id)):
         "study_plan": study_plan
     }
 
+@app.get("/api/learning/plan")
+def get_learning_plan_endpoint(user_id: Optional[str] = Depends(get_optional_user_id)):
+    data = get_progress_analytics(user_id)
+    plan = data.get("study_plan", {})
+    return {
+        "current_focus": plan.get("focus_topic", "Algorithms & Control Flow"),
+        "steps": plan.get("steps", []),
+        "recommended_topics": plan.get("recommended_topics", [])
+    }
+
 # ----------------- SETTINGS & CONFIG -----------------
 @app.get("/api/settings/config")
 def get_config(user_id: str = Depends(get_current_user_id)):
@@ -1064,6 +1145,7 @@ def get_config(user_id: str = Depends(get_current_user_id)):
     }
 
 @app.post("/api/settings/save-key")
+@app.post("/api/settings/apikey")
 def save_user_gemini_key(req: SaveKeyRequest, user_id: str = Depends(get_current_user_id)):
     if req.api_key.strip():
         USER_CUSTOM_KEYS[user_id] = req.api_key.strip()

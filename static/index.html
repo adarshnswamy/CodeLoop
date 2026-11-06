@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CodeLoop | Professional AI Programming Workspace</title>
+  <title>CODELOOP — Learn. Code. Build. Repeat.</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233B82F6'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
   
+  <!-- Inter & JetBrains Mono Fonts from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -13,32 +19,34 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
-            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
           },
           colors: {
-            brand: {
-              50: '#eff6ff',
-              100: '#dbeafe',
-              200: '#bfdbfe',
-              500: '#3b82f6',
-              600: '#2563eb',
-              700: '#1d4ed8',
+            main: '#090B10',
+            secondary: '#0E1118',
+            card: '#11151D',
+            elevated: '#1B2230',
+            primary: {
+              DEFAULT: '#3B82F6',
+              hover: '#2563EB',
+              muted: '#1D4ED8',
+              surface: 'rgba(59, 130, 246, 0.1)',
+              border: 'rgba(59, 130, 246, 0.25)',
             },
-            app: {
-              bg: '#09090b',
-              surface: '#121215',
-              surfaceRaised: '#18181b',
-              border: '#27272a',
-              borderSubtle: '#1f1f23',
-              text: '#f4f4f5',
-              muted: '#a1a1aa',
-              dim: '#71717a',
-              primary: '#2563eb',
-              primaryHover: '#1d4ed8',
-              success: '#10b981',
-              danger: '#ef4444',
-              warning: '#f59e0b',
+            accent: {
+              DEFAULT: '#8B5CF6',
+              hover: '#7C3AED',
+              surface: 'rgba(139, 92, 246, 0.1)',
+            },
+            subtle: '#94A3B8',
+            surfaceText: '#F1F5F9',
+            darkBorder: '#1E293B',
+            darkBorderElevated: '#283347',
+            status: {
+              success: '#10B981',
+              warning: '#F59E0B',
+              error: '#EF4444',
             }
           }
         }
@@ -74,231 +82,140 @@
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js" defer></script>
 
   <style>
-    /* Clean High-Contrast Scrollbars */
+    /* Strict Dark Theme Base */
+    html, body {
+      background-color: #090B10;
+      color: #F1F5F9;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Minimalist High-Precision Scrollbars */
     ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+      width: 5px;
+      height: 5px;
     }
     ::-webkit-scrollbar-track {
       background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 3px;
-    }
-    .dark ::-webkit-scrollbar-thumb {
-      background: #3f3f46;
+      background: #1E293B;
+      border-radius: 4px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8;
-    }
-    .dark ::-webkit-scrollbar-thumb:hover {
-      background: #52525b;
+      background: #283347;
     }
 
-    /* Design System Tokens */
-    .theme-card {
-      background-color: #ffffff;
-      border: 1px solid #e2e8f0;
-      color: #0f172a;
-    }
-    .dark .theme-card {
-      background-color: #121215;
-      border: 1px solid #27272a;
-      color: #f4f4f5;
+    /* Selection Highlighting */
+    ::selection {
+      background-color: rgba(59, 130, 246, 0.3);
+      color: #FFFFFF;
     }
 
-    .theme-card-subtle {
-      background-color: #f8fafc;
-      border: 1px solid #e2e8f0;
-      color: #1e293b;
+    /* Design System Card & Surface Utility Classes */
+    .cd-card {
+      background-color: #11151D;
+      border: 1px solid #1E293B;
+      border-radius: 0.75rem;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
     }
-    .dark .theme-card-subtle {
-      background-color: #18181b;
-      border: 1px solid #27272a;
-      color: #f4f4f5;
+    .cd-card:hover {
+      border-color: #283347;
     }
-
-    .theme-input {
-      background-color: #ffffff;
-      border: 1px solid #cbd5e1;
-      color: #0f172a;
-    }
-    .dark .theme-input {
-      background-color: #18181b;
-      border: 1px solid #27272a;
-      color: #f4f4f5;
-    }
-    .theme-input::placeholder {
-      color: #94a3b8;
-    }
-    .dark .theme-input::placeholder {
-      color: #52525b;
+    .cd-card-interactive:hover {
+      border-color: rgba(59, 130, 246, 0.4);
+      background-color: #141923;
     }
 
-    /* Markdown High-Contrast Dark Styling */
+    .cd-elevated {
+      background-color: #1B2230;
+      border: 1px solid #283347;
+      border-radius: 0.75rem;
+    }
+
+    .cd-input {
+      background-color: #0E1118;
+      border: 1px solid #1E293B;
+      color: #F1F5F9;
+      transition: all 0.15s ease;
+    }
+    .cd-input:focus {
+      outline: none;
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 1px #3B82F6;
+    }
+    .cd-input::placeholder {
+      color: #64748B;
+    }
+
+    /* Markdown Styling in AI Tutor & Explanations */
     .prose-dark {
-      color: #e4e4e7;
-      line-height: 1.7;
-      font-size: 0.925rem;
+      color: #E2E8F0;
+      line-height: 1.68;
+      font-size: 0.915rem;
     }
     .prose-dark h1, .prose-dark h2, .prose-dark h3, .prose-dark h4 {
-      color: #fafafa;
+      color: #F8FAFC;
       font-weight: 600;
       margin-top: 1.25rem;
-      margin-bottom: 0.5rem;
-      letter-spacing: -0.01em;
+      margin-bottom: 0.45rem;
+      letter-spacing: -0.015em;
     }
-    .prose-dark h1 { font-size: 1.35rem; }
-    .prose-dark h2 { font-size: 1.18rem; }
-    .prose-dark h3 { font-size: 1.05rem; }
+    .prose-dark h1 { font-size: 1.3rem; }
+    .prose-dark h2 { font-size: 1.15rem; }
+    .prose-dark h3 { font-size: 1.025rem; }
     .prose-dark p {
-      margin-bottom: 0.85rem;
+      margin-bottom: 0.75rem;
     }
     .prose-dark ul {
-      margin-left: 1.4rem;
-      margin-bottom: 0.85rem;
+      margin-left: 1.25rem;
+      margin-bottom: 0.75rem;
       list-style-type: disc;
     }
     .prose-dark ol {
-      margin-left: 1.4rem;
-      margin-bottom: 0.85rem;
+      margin-left: 1.25rem;
+      margin-bottom: 0.75rem;
       list-style-type: decimal;
     }
     .prose-dark li {
-      margin-bottom: 0.35rem;
-      padding-left: 0.25rem;
+      margin-bottom: 0.3rem;
+      padding-left: 0.2rem;
+    }
+    .prose-dark strong {
+      color: #F8FAFC;
+      font-weight: 600;
     }
     .prose-dark code {
-      background: #18181b;
-      color: #f4f4f5;
-      border: 1px solid #27272a;
-      padding: 0.15rem 0.35rem;
+      background: #1B2230;
+      color: #93C5FD;
+      border: 1px solid #283347;
+      padding: 0.12rem 0.35rem;
       border-radius: 0.25rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.85em;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.84em;
     }
     .prose-dark blockquote {
-      border-left: 3px solid #3b82f6;
-      background: #141418;
+      border-left: 3px solid #3B82F6;
+      background: #0E1118;
       padding: 0.5rem 0.85rem;
       border-radius: 0 4px 4px 0;
-      color: #d4d4d8;
-      margin: 0.85rem 0;
+      color: #CBD5E1;
+      margin: 0.75rem 0;
     }
     .prose-dark a {
-      color: #3b82f6;
+      color: #3B82F6;
       text-decoration: underline;
       text-underline-offset: 2px;
     }
     .prose-dark a:hover {
-      color: #60a5fa;
-    }
-    .prose-dark table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 0.85rem 0;
-      font-size: 0.85rem;
-    }
-    .prose-dark th {
-      padding: 0.5rem 0.75rem;
-      font-weight: 600;
-      text-align: left;
-      background: #18181b;
-      border-bottom: 2px solid #27272a;
-      color: #f4f4f5;
-    }
-    .prose-dark td {
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid #27272a;
-      color: #d4d4d8;
-    }
-    .prose-dark tr:hover td {
-      background: rgba(39, 39, 42, 0.4);
+      color: #60A5FA;
     }
 
-    /* Light mode markdown */
-    .prose-light {
-      color: #1e293b;
-      line-height: 1.7;
-      font-size: 0.925rem;
-    }
-    .prose-light h1, .prose-light h2, .prose-light h3, .prose-light h4 {
-      color: #0f172a;
-      font-weight: 600;
-      margin-top: 1.25rem;
-      margin-bottom: 0.5rem;
-      letter-spacing: -0.01em;
-    }
-    .prose-light h1 { font-size: 1.35rem; }
-    .prose-light h2 { font-size: 1.18rem; }
-    .prose-light h3 { font-size: 1.05rem; }
-    .prose-light p {
-      margin-bottom: 0.85rem;
-    }
-    .prose-light ul {
-      margin-left: 1.4rem;
-      margin-bottom: 0.85rem;
-      list-style-type: disc;
-    }
-    .prose-light ol {
-      margin-left: 1.4rem;
-      margin-bottom: 0.85rem;
-      list-style-type: decimal;
-    }
-    .prose-light li {
-      margin-bottom: 0.35rem;
-      padding-left: 0.25rem;
-    }
-    .prose-light code {
-      background: #f1f5f9;
-      color: #0f172a;
-      border: 1px solid #e2e8f0;
-      padding: 0.15rem 0.35rem;
-      border-radius: 0.25rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.85em;
-    }
-    .prose-light blockquote {
-      border-left: 3px solid #2563eb;
-      background: #f8fafc;
-      padding: 0.5rem 0.85rem;
-      border-radius: 0 4px 4px 0;
-      color: #475569;
-      margin: 0.85rem 0;
-    }
-    .prose-light a {
-      color: #2563eb;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-    .prose-light a:hover {
-      color: #1d4ed8;
-    }
-    .prose-light table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 0.85rem 0;
-      font-size: 0.85rem;
-    }
-    .prose-light th {
-      padding: 0.5rem 0.75rem;
-      font-weight: 600;
-      text-align: left;
-      background: #f1f5f9;
-      border-bottom: 2px solid #e2e8f0;
-      color: #0f172a;
-    }
-    .prose-light td {
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid #e2e8f0;
-      color: #334155;
-    }
-    .prose-light tr:hover td {
-      background: rgba(241, 245, 249, 0.6);
-    }
-
-    /* Code block styling overrides */
+    /* Prism Syntax Highlight Code Blocks */
     .code-block-wrapper pre {
       background: transparent !important;
       margin: 0 !important;
@@ -310,11 +227,20 @@
       padding: 0 !important;
       font-size: 12.5px !important;
       line-height: 1.65 !important;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+    }
+
+    /* Pulse animation for running execution */
+    @keyframes subtlePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .animate-subtle-pulse {
+      animation: subtlePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
   </style>
 </head>
-<body class="bg-[#f8fafc] text-[#0f172a] dark:bg-[#09090b] dark:text-[#f4f4f5] font-sans antialiased min-h-screen">
+<body class="bg-[#090B10] text-[#F1F5F9] font-sans antialiased min-h-screen">
   <div id="root"></div>
 
   <!-- Monaco loader configuration -->
@@ -322,6 +248,33 @@
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
     window.MonacoLoaded = new Promise((resolve) => {
       require(['vs/editor/editor.main'], function () {
+        // Define Custom CodeLoop Dark Monaco Theme
+        if (window.monaco) {
+          window.monaco.editor.defineTheme('codeloop-dark', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [
+              { token: '', background: '0E1118', foreground: 'E2E8F0' },
+              { token: 'comment', foreground: '64748B', fontStyle: 'italic' },
+              { token: 'keyword', foreground: '3B82F6', fontStyle: 'bold' },
+              { token: 'string', foreground: '10B981' },
+              { token: 'number', foreground: 'F59E0B' },
+              { token: 'type', foreground: '8B5CF6' },
+              { token: 'function', foreground: '60A5FA' }
+            ],
+            colors: {
+              'editor.background': '#0E1118',
+              'editor.foreground': '#F1F5F9',
+              'editorLineNumber.foreground': '#475569',
+              'editorLineNumber.activeForeground': '#94A3B8',
+              'editor.lineHighlightBackground': '#141923',
+              'editorCursor.foreground': '#3B82F6',
+              'editor.selectionBackground': '#1E293B',
+              'editorIndentGuide.background': '#1E293B',
+              'editorIndentGuide.activeBackground': '#334155'
+            }
+          });
+        }
         resolve(window.monaco);
       });
     });
