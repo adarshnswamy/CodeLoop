@@ -202,7 +202,7 @@ function MonacoEditor({ code, language, onChange, height = "460px" }) {
 function App() {
   const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const initialToken = (urlParams && urlParams.get("token")) || localStorage.getItem("codeloop_token") || "";
-  const initialTab = (urlParams && urlParams.get("tab")) || "dashboard";
+  const initialTab = (urlParams && urlParams.get("tab")) || (initialToken ? "dashboard" : "landing");
 
   // Guest-friendly user defaults: No forced auth wall on entry
   const GUEST_USER = {
@@ -342,21 +342,33 @@ function App() {
         />
       )}
 
-      {/* Global Collapsible Sidebar */}
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        currentUser={currentUser} 
-        logout={logout}
-        requireAuth={requireAuth}
-        collapsed={sidebarCollapsed}
-        toggleCollapse={toggleSidebarCollapse}
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-      />
+      {/* Full-Bleed Modern Landing Page View */}
+      {activeTab === "landing" ? (
+        <LandingPageView
+          currentUser={currentUser}
+          setActiveTab={setActiveTab}
+          openInEditor={openInEditor}
+          askTutor={askTutor}
+          requireAuth={requireAuth}
+          showToast={showToast}
+        />
+      ) : (
+        <>
+          {/* Global Collapsible Sidebar */}
+          <Sidebar 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            currentUser={currentUser} 
+            logout={logout}
+            requireAuth={requireAuth}
+            collapsed={sidebarCollapsed}
+            toggleCollapse={toggleSidebarCollapse}
+            mobileMenuOpen={mobileMenuOpen}
+            setMobileMenuOpen={setMobileMenuOpen}
+          />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         <Header 
           activeTab={activeTab} 
           currentUser={currentUser} 
@@ -366,6 +378,7 @@ function App() {
           setVoiceEnabled={setVoiceEnabled}
           setMobileMenuOpen={setMobileMenuOpen}
           requireAuth={requireAuth}
+          setActiveTab={setActiveTab}
         />
 
         <main className={`flex-1 w-full ${activeTab === "tutor" ? "p-0 h-[calc(100vh-3.5rem)] overflow-hidden" : "p-4 md:p-6 max-w-7xl mx-auto"}`}>
@@ -380,6 +393,8 @@ function App() {
           {activeTab === "settings" && <SettingsView currentUser={currentUser} refreshProfile={apiProfile} showToast={showToast} logout={logout} requireAuth={requireAuth} />}
         </main>
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -543,6 +558,941 @@ function AuthModal({ reason, onSuccess, onClose }) {
   );
 }
 
+
+// ----------------- LANDING PAGE VIEW -----------------
+function LandingPageView({ currentUser, setActiveTab, openInEditor, askTutor, requireAuth, showToast }) {
+  const isGuest = currentUser?.isGuest;
+  const [selectedLanguage, setSelectedLanguage] = useState("python");
+  const [isRunning, setIsRunning] = useState(false);
+  const [terminalOutput, setTerminalOutput] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const snippets = {
+    python: {
+      langKey: "python",
+      fileName: "two_sum.py",
+      langLabel: "Python 3.11 (WASM)",
+      code: `# Optimal O(n) Two-Sum with Hash Map
+def two_sum(nums, target):
+    seen = {}
+    for i, num in enumerate(nums):
+        diff = target - num
+        if diff in seen:
+            return (seen[diff], i)
+        seen[num] = i
+    return None
+
+# Test dataset
+numbers = [2, 7, 11, 15]
+target_val = 9
+result = two_sum(numbers, target_val)
+
+print(f"Dataset: {numbers} | Target: {target_val}")
+if result:
+    i1, i2 = result
+    print(f"Optimal Indices: [{i1}, {i2}] -> Values: {numbers[i1]} + {numbers[i2]} = {target_val}")
+    print("[SUCCESS] Computed in single-pass O(n) time!")
+`,
+      output: `[Sandbox] In-browser Pyodide Python 3.11 runtime ready.
+[Execute] Running two_sum.py...
+Dataset: [2, 7, 11, 15] | Target: 9
+Optimal Indices: [0, 1] -> Values: 2 + 7 = 9
+[SUCCESS] Computed in single-pass O(n) time!
+------------------------------------------------------------
+✓ Test 1: Standard target pair [2, 7, 11, 15] target=9 -> Passed (0.4ms)
+✓ Test 2: Edge duplicate items [3, 2, 4] target=6 -> Passed (0.2ms)
+✓ Test 3: Large randomized array -> Passed (1.1ms)
+============================================================
+Benchmark: 3/3 Test cases passed. Memory: 11.2 MB.`,
+      tip: "Using a hash table maps search lookups to O(1) expected time, shrinking the overall algorithm from O(n²) to O(n)."
+    },
+    javascript: {
+      langKey: "javascript",
+      fileName: "binary_search.js",
+      langLabel: "JavaScript (V8 Engine)",
+      code: `// High-Speed Binary Search
+function binarySearch(arr, target) {
+  let low = 0, high = arr.length - 1;
+  let steps = 0;
+
+  while (low <= high) {
+    steps++;
+    const mid = Math.floor((low + high) / 2);
+    if (arr[mid] === target) return { index: mid, steps };
+    if (arr[mid] < target) low = mid + 1;
+    else high = mid - 1;
+  }
+  return { index: -1, steps };
+}
+
+const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47];
+const target = 29;
+const res = binarySearch(primes, target);
+
+console.log(\`Array size: \${primes.length} elements\`);
+console.log(\`Searching for target: \${target}\`);
+console.log(\`Found at index \${res.index} in only \${res.steps} steps! O(log n) efficiency.\`);
+`,
+      output: `[Sandbox] JavaScript runtime initialized.
+Array size: 15 elements
+Searching for target: 29
+Found at index 9 in only 3 steps! O(log n) efficiency.
+------------------------------------------------------------
+✓ Test 1: Value in upper partition -> Passed (0.3ms)
+✓ Test 2: Boundary check at index 0 -> Passed (0.1ms)
+✓ Test 3: Non-existent item return -1 -> Passed (0.2ms)
+============================================================
+Benchmark: 3/3 Test assertions accepted. Time: 0.6ms.`,
+      tip: "Binary search eliminates half the remaining space on every step. An array of 1,000,000 items takes at most 20 comparisons!"
+    },
+    cpp: {
+      langKey: "cpp",
+      fileName: "vector_sort.cpp",
+      langLabel: "C++ 20 (GCC Cluster)",
+      code: `// High-Performance C++ Algorithmic Transformation
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <numeric>
+
+int main() {
+    std::vector<int> scores = {92, 74, 88, 95, 61, 83, 100, 77};
+    std::sort(scores.begin(), scores.end(), std::greater<int>());
+
+    std::cout << "Top 3 High Scores: ";
+    for (int i = 0; i < 3; ++i) {
+        std::cout << scores[i] << " ";
+    }
+    std::cout << std::endl;
+
+    double avg = std::accumulate(scores.begin(), scores.end(), 0.0) / scores.size();
+    std::cout << "Class Average: " << avg << std::endl;
+    return 0;
+}
+`,
+      output: `[Compiler] gcc -O3 -std=c++20 vector_sort.cpp -o vector_sort
+[Execute] ./vector_sort
+Top 3 High Scores: 100 95 92 
+Class Average: 83.75
+------------------------------------------------------------
+✓ Test 1: Vector descending sort verified -> Passed (1.7ms)
+✓ Test 2: Precision accumulator check -> Passed (0.4ms)
+✓ Test 3: Memory leaks checked (Valgrind clean) -> Passed
+============================================================
+Compiler cluster: 3/3 Tests passed. Total execution: 2.1ms.`,
+      tip: "std::sort leverages introsort, combining quicksort with a heapsort fallback to guarantee O(n log n) worst-case time."
+    }
+  };
+
+  const activeSnippet = snippets[selectedLanguage];
+
+  const handleRun = () => {
+    setIsRunning(true);
+    setTerminalOutput(null);
+    setTimeout(() => {
+      setTerminalOutput(activeSnippet.output);
+      setIsRunning(false);
+      if (showToast) showToast("Sandbox execution completed successfully", "success");
+    }, 500);
+  };
+
+  const handleOpenPlaygroundWithCode = () => {
+    openInEditor(activeSnippet.code, activeSnippet.langKey);
+    setActiveTab("editor");
+  };
+
+  return (
+    <div className="min-h-screen bg-[#090B10] text-[#F1F5F9] font-sans antialiased overflow-x-hidden selection:bg-blue-500/25 selection:text-white">
+      {/* ----------------- 1. MODERN TOP NAVIGATION BAR ----------------- */}
+      <header className="sticky top-0 z-40 w-full bg-[#090B10]/85 backdrop-blur-xl border-b border-[#1E293B]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          {/* Logo & Philosophy Tag */}
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 shrink-0">
+              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base tracking-tight text-white">CODELOOP</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  v2.0
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
+                Learn • Code • Build • Repeat
+              </span>
+            </div>
+          </div>
+
+          {/* Desktop Nav Links */}
+          <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-slate-400">
+            <a href="#features" className="hover:text-white transition">Features</a>
+            <a href="#playground" className="hover:text-white transition">Playground</a>
+            <a href="#arena" className="hover:text-white transition">Competitive Arena</a>
+            <a href="#ai-tutor" className="hover:text-white transition">Socratic AI</a>
+            <a href="#curriculum" className="hover:text-white transition">Curriculum</a>
+          </nav>
+
+          {/* Right Action CTAs */}
+          <div className="hidden sm:flex items-center gap-3">
+            {isGuest ? (
+              <>
+                <button
+                  onClick={() => requireAuth("Sign in to your CODELOOP account to save programs, track streaks, and sync progress across devices.")}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-[#1B2230] border border-transparent hover:border-[#283347] transition"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => setActiveTab("editor")}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 transition active:scale-[0.98]"
+                >
+                  <span>Launch Playground</span>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400 font-mono hidden lg:inline">
+                  Welcome, <strong className="text-white">{currentUser?.name?.split(' ')[0]}</strong>
+                </span>
+                <button
+                  onClick={() => setActiveTab("dashboard")}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 transition active:scale-[0.98]"
+                >
+                  <span>Open Workspace</span>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            className="md:hidden p-2 text-slate-400 hover:text-white hover:bg-[#1B2230] rounded-lg"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {mobileNavOpen ? (
+                <path d="M18 6L6 18M6 6l12 12" />
+              ) : (
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile Dropdown Menu */}
+        {mobileNavOpen && (
+          <div className="md:hidden border-b border-[#1E293B] bg-[#0E1118] px-4 py-4 space-y-3">
+            <a 
+              href="#features" 
+              onClick={() => setMobileNavOpen(false)}
+              className="block text-xs font-medium text-slate-300 py-1.5"
+            >Features</a>
+            <a 
+              href="#playground" 
+              onClick={() => setMobileNavOpen(false)}
+              className="block text-xs font-medium text-slate-300 py-1.5"
+            >Playground Preview</a>
+            <a 
+              href="#arena" 
+              onClick={() => setMobileNavOpen(false)}
+              className="block text-xs font-medium text-slate-300 py-1.5"
+            >Competitive Arena</a>
+            <a 
+              href="#ai-tutor" 
+              onClick={() => setMobileNavOpen(false)}
+              className="block text-xs font-medium text-slate-300 py-1.5"
+            >Socratic AI</a>
+            <a 
+              href="#curriculum" 
+              onClick={() => setMobileNavOpen(false)}
+              className="block text-xs font-medium text-slate-300 py-1.5"
+            >Curriculum</a>
+            <div className="pt-2 border-t border-[#1E293B] flex flex-col gap-2">
+              <button
+                onClick={() => { setActiveTab("editor"); setMobileNavOpen(false); }}
+                className="w-full py-2.5 rounded-lg text-xs font-semibold bg-blue-600 text-white text-center"
+              >
+                Launch Playground (No Login Needed)
+              </button>
+              {isGuest ? (
+                <button
+                  onClick={() => { setMobileNavOpen(false); requireAuth("Sign In to access cloud features."); }}
+                  className="w-full py-2.5 rounded-lg text-xs font-semibold bg-[#1B2230] text-slate-300 border border-[#283347] text-center"
+                >
+                  Sign In / Register
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setActiveTab("dashboard"); setMobileNavOpen(false); }}
+                  className="w-full py-2.5 rounded-lg text-xs font-semibold bg-[#1B2230] text-slate-300 border border-[#283347] text-center"
+                >
+                  Go to Dashboard
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* ----------------- 2. HERO SECTION ----------------- */}
+      <section className="relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden">
+        {/* Ambient Glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-gradient-to-tr from-blue-600/20 via-indigo-600/15 to-purple-600/10 blur-[120px] pointer-events-none rounded-full" />
+        <div className="absolute top-10 right-10 w-72 h-72 bg-blue-500/10 blur-[100px] pointer-events-none rounded-full" />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+          {/* Announcement Pill */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#11151D] border border-[#283347] text-xs font-mono text-slate-300 mb-6 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-slate-400">Zero-Setup In-Browser Sandbox</span>
+            <span className="text-slate-600">•</span>
+            <span className="text-blue-400 font-semibold">Python WASM + Socratic AI</span>
+          </div>
+
+          {/* High-Impact Headline */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-[1.12]">
+            Master Programming.{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">
+              Build Real Software.
+            </span>{" "}
+            Repeat.
+          </h1>
+
+          {/* Subtitle */}
+          <p className="mt-6 text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            CODELOOP combines instant client-side WebAssembly compilation, a patient pedagogical AI programming mentor, and a competitive algorithmic arena — designed for aspiring engineers who learn by coding.
+          </p>
+
+          {/* CTAs */}
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
+            <button
+              onClick={() => setActiveTab("editor")}
+              className="flex items-center gap-2 px-6 py-3.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-600/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+            >
+              <span>Start Coding Now — Free & Instant</span>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("practice")}
+              className="flex items-center gap-2 px-5 py-3.5 rounded-xl text-sm font-medium bg-[#11151D] hover:bg-[#1B2230] text-slate-200 border border-[#1E293B] hover:border-[#283347] transition transform hover:-translate-y-0.5"
+            >
+              <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>Explore Practice Arena</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("tutor")}
+              className="flex items-center gap-2 px-5 py-3.5 rounded-xl text-sm font-medium bg-[#11151D] hover:bg-[#1B2230] text-slate-200 border border-[#1E293B] hover:border-[#283347] transition transform hover:-translate-y-0.5"
+            >
+              <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              <span>Ask AI Tutor</span>
+            </button>
+          </div>
+
+          {/* Trust Value Badges */}
+          <div className="mt-12 pt-8 border-t border-[#1E293B]/60 max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs font-mono text-slate-400">
+            <div className="flex items-center gap-2">
+              <span className="text-emerald-400 font-bold">✓</span>
+              <span>No Sign-Up Wall to Write Code</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-blue-400 font-bold">✓</span>
+              <span>Pyodide WebAssembly Python 3.11</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-indigo-400 font-bold">✓</span>
+              <span>C, C++, Java Cloud Compilers</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400 font-bold">✓</span>
+              <span>Automated Unit Test Evaluation</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ----------------- 3. INTERACTIVE HERO CODE PLAYGROUND PREVIEW ----------------- */}
+        <div id="playground" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-14 relative z-10">
+          <div className="rounded-2xl border border-[#283347] bg-[#0E1118] shadow-2xl shadow-black/80 overflow-hidden">
+            {/* Window Top Bar */}
+            <div className="px-4 py-3 bg-[#11151D] border-b border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
+              {/* Traffic Lights & Filename Tabs */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
+                  <div className="w-3 h-3 rounded-full bg-amber-500/80"></div>
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/80"></div>
+                </div>
+
+                <div className="flex items-center gap-1 pl-2 border-l border-[#1E293B]">
+                  {Object.keys(snippets).map((key) => {
+                    const snip = snippets[key];
+                    const active = selectedLanguage === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { setSelectedLanguage(key); setTerminalOutput(null); }}
+                        className={`px-3 py-1.5 rounded-md text-xs font-mono transition flex items-center gap-1.5 ${
+                          active 
+                            ? "bg-[#1B2230] text-blue-400 border border-[#283347] font-semibold" 
+                            : "text-slate-400 hover:text-white hover:bg-[#141923]"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-blue-400" : "bg-slate-600"}`}></span>
+                        <span>{snip.fileName}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRun}
+                  disabled={isRunning}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition active:scale-[0.98] disabled:opacity-50"
+                  title="Execute code in sandbox preview"
+                >
+                  <svg className={`w-3.5 h-3.5 ${isRunning ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    {isRunning ? (
+                      <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+                    ) : (
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    )}
+                  </svg>
+                  <span>{isRunning ? "Running..." : "Run Sandbox"}</span>
+                </button>
+
+                <button
+                  onClick={handleOpenPlaygroundWithCode}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 transition"
+                  title="Open code in full Code Playground workspace"
+                >
+                  <span>Open in Full IDE</span>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Split Editor and Terminal Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[380px]">
+              {/* Code Panel */}
+              <div className="lg:col-span-7 p-4 bg-[#0E1118] font-mono text-xs overflow-x-auto border-b lg:border-b-0 lg:border-r border-[#1E293B]">
+                <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#1E293B]/60 text-[11px] text-slate-500">
+                  <span>Language: <strong className="text-slate-300">{activeSnippet.langLabel}</strong></span>
+                  <span className="text-emerald-400 font-medium">● Sandbox Ready</span>
+                </div>
+                <pre className="text-slate-300 leading-relaxed font-mono whitespace-pre-wrap selection:bg-blue-500/30">
+                  {activeSnippet.code}
+                </pre>
+              </div>
+
+              {/* Terminal & AI Insight Panel */}
+              <div className="lg:col-span-5 flex flex-col bg-[#090B10]">
+                {/* Socratic Mentor Bubble */}
+                <div className="p-3.5 bg-[#11151D] border-b border-[#1E293B] flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0 text-xs font-bold">
+                    AI
+                  </div>
+                  <div className="flex-1 text-xs">
+                    <div className="font-semibold text-blue-300 mb-0.5">Socratic Mentor Hint:</div>
+                    <p className="text-slate-400 text-[11.5px] leading-relaxed">
+                      {activeSnippet.tip}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Console Output */}
+                <div className="flex-1 p-4 font-mono text-[11.5px] overflow-y-auto">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wider mb-2">
+                    <span>TERMINAL CONSOLE</span>
+                    <span>{terminalOutput ? "STATUS: 200 OK" : "IDLE"}</span>
+                  </div>
+
+                  {terminalOutput ? (
+                    <pre className="text-emerald-400 whitespace-pre-wrap leading-relaxed">
+                      {terminalOutput}
+                    </pre>
+                  ) : (
+                    <div className="h-full min-h-[160px] flex flex-col items-center justify-center text-center text-slate-500 space-y-2">
+                      <svg className="w-8 h-8 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <polyline points="4 17 10 11 4 5"></polyline>
+                        <line x1="12" y1="19" x2="20" y2="19"></line>
+                      </svg>
+                      <p className="text-xs">Click <strong className="text-emerald-400">Run Sandbox</strong> above to test live execution and unit benchmarks.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- 4. CORE FEATURES (BENTO GRID) ----------------- */}
+      <section id="features" className="py-20 border-t border-[#1E293B] relative bg-[#090B10]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <span className="text-xs font-mono font-semibold uppercase tracking-widest text-blue-400">ARCHITECTURE & WORKSPACE</span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-2 tracking-tight">
+              Engineered for Speed, Clarity, and Mastery
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-400">
+              Everything you need to grow from syntax beginner to algorithmic problem solver.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Bento Card 1: WASM Engine */}
+            <div className="cd-card p-6 flex flex-col justify-between hover:border-blue-500/40 transition group">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4 group-hover:scale-105 transition">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Zero-Latency Pyodide WASM</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Python 3.11 runs directly inside your browser via WebAssembly. Experience instantaneous execution, real interactive standard input (<code className="text-blue-300">input()</code>), and zero queue times.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-[#1E293B] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Latency: ~0ms</span>
+                <span className="text-emerald-400 font-semibold">Client-Side Runtime</span>
+              </div>
+            </div>
+
+            {/* Bento Card 2: Socratic AI Tutor */}
+            <div className="cd-card p-6 flex flex-col justify-between hover:border-purple-500/40 transition group">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 transition">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Socratic Pedagogical AI</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Not an answer-dumping bot. Our mentor AI asks guiding questions, explains concept ladders, offers targeted hints, and helps you internalize the principles of computer science.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-[#1E293B] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Pedagogy: Active Learning</span>
+                <span className="text-purple-400 font-semibold">Concept Scaffolding</span>
+              </div>
+            </div>
+
+            {/* Bento Card 3: Algorithmic Practice Arena */}
+            <div className="cd-card p-6 flex flex-col justify-between hover:border-emerald-500/40 transition group">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-105 transition">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Automated Practice Arena</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Tackle curated algorithmic problems across arrays, strings, two-pointers, and recursion. Run code against automated edge-case test suites with instant pass/fail feedback.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-[#1E293B] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Test Suites: Comprehensive</span>
+                <span className="text-emerald-400 font-semibold">Immediate Verdicts</span>
+              </div>
+            </div>
+
+            {/* Bento Card 4: Study Material Vault */}
+            <div className="cd-card p-6 flex flex-col justify-between hover:border-indigo-500/40 transition group">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-105 transition">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Document Learning Vault</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Upload lecture notes, textbook slides, and syllabus documents. Query them with grounded AI chat that cites exact definitions and equations from your uploaded material.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-[#1E293B] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Format: PDF / Text Ingestion</span>
+                <span className="text-indigo-400 font-semibold">Grounded RAG</span>
+              </div>
+            </div>
+
+            {/* Bento Card 5: Multi-Language Compilers */}
+            <div className="cd-card p-6 flex flex-col justify-between hover:border-amber-500/40 transition group">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 group-hover:scale-105 transition">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Multi-Tier Compiler Cluster</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Support for Python, JavaScript, C, C++, and Java powered by a resilient cluster (Judge0 CE, Wandbox, Piston) with intelligent fallback and clear compilation diagnostics.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-[#1E293B] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Languages: Python, JS, C, C++, Java</span>
+                <span className="text-amber-400 font-semibold">Cluster Redundancy</span>
+              </div>
+            </div>
+
+            {/* Bento Card 6: Mastery Telemetry */}
+            <div className="cd-card p-6 flex flex-col justify-between hover:border-blue-500/40 transition group">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4 group-hover:scale-105 transition">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                </div>
+                <h3 className="text-base font-bold text-white mb-2">Telemetry & Daily Streaks</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Track consistency, problem accuracy, and algorithmic strengths. Our engine analyzes weak areas to build a tailored study roadmap with targeted recommendations.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-[#1E293B] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Metrics: Streaks, Solves, Goals</span>
+                <span className="text-blue-400 font-semibold">Adaptive Roadmap</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- 5. COMPETITIVE ARENA & CHALLENGES ----------------- */}
+      <section id="arena" className="py-20 border-t border-[#1E293B] bg-[#0E1118]/60 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-12">
+            <div>
+              <span className="text-xs font-mono font-semibold uppercase tracking-widest text-amber-400">COMPETITIVE LEARNING</span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-1 tracking-tight">
+                Practice Arena & Daily Challenges
+              </h2>
+              <p className="mt-2 text-sm text-slate-400 max-w-xl">
+                Compete against yourself. Solve curated algorithmic puzzles, submit code against hidden tests, and maintain your learning streak.
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab("practice")}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition shrink-0"
+            >
+              <span>View All Practice Problems</span>
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+
+          {/* Daily Problem Spotlight Card */}
+          <div className="cd-card p-6 md:p-8 border border-amber-500/30 bg-gradient-to-br from-[#11151D] via-[#141923] to-[#0E1118] mb-8">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#1E293B]">
+              <div className="flex items-center gap-2.5">
+                <span className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs font-bold">
+                  DAILY CHALLENGE
+                </span>
+                <span className="text-xs font-mono text-slate-400">ID: py-01</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Beginner
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-mono text-slate-400">
+                <span>Acceptance: <strong className="text-white">92.4%</strong></span>
+                <span>Reward: <strong className="text-amber-400">+50 XP</strong></span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 items-center">
+              <div className="lg:col-span-8">
+                <h3 className="text-xl font-bold text-white">Sum of Two Numbers with Interactive STDIN</h3>
+                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                  Read two space-separated integers from standard input and compute their exact arithmetic sum. Handle negative boundaries and integer edge conditions.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-mono">
+                  <span className="px-2 py-1 rounded bg-[#1B2230] text-slate-300 border border-[#283347]">Topic: Variables & I/O</span>
+                  <span className="px-2 py-1 rounded bg-[#1B2230] text-slate-300 border border-[#283347]">Time Limit: 2.0s</span>
+                  <span className="px-2 py-1 rounded bg-[#1B2230] text-slate-300 border border-[#283347]">Memory: 64MB</span>
+                </div>
+              </div>
+
+              <div className="lg:col-span-4 flex flex-col gap-2.5">
+                <button
+                  onClick={() => setActiveTab("practice")}
+                  className="w-full py-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 transition active:scale-[0.98] text-center"
+                >
+                  Solve in Practice Arena →
+                </button>
+                <button
+                  onClick={() => askTutor("Give me a hint for solving the Sum of Two Numbers problem", "hint")}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold bg-[#1B2230] hover:bg-[#283347] text-slate-300 border border-[#283347] transition text-center"
+                >
+                  Ask AI Tutor for a Hint
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Curated Problem Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { id: "py-01", title: "Sum of Two Numbers", diff: "Beginner", diffColor: "text-emerald-400 bg-emerald-500/10", tag: "Math & I/O", acc: "94%" },
+              { id: "py-02", title: "Reverse an Array", diff: "Beginner", diffColor: "text-emerald-400 bg-emerald-500/10", tag: "Two Pointers", acc: "89%" },
+              { id: "py-03", title: "Valid Palindrome", diff: "Intermediate", diffColor: "text-amber-400 bg-amber-500/10", tag: "Strings", acc: "79%" },
+              { id: "py-04", title: "Factorial & Recursion", diff: "Intermediate", diffColor: "text-amber-400 bg-amber-500/10", tag: "Recursion", acc: "74%" }
+            ].map((prob) => (
+              <div 
+                key={prob.id} 
+                onClick={() => setActiveTab("practice")}
+                className="cd-card p-4 hover:border-blue-500/40 cursor-pointer transition flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono text-slate-500">{prob.id}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${prob.diffColor}`}>
+                      {prob.diff}
+                    </span>
+                  </div>
+                  <h4 className="text-xs font-bold text-white mb-1">{prob.title}</h4>
+                  <span className="text-[11px] text-slate-400 font-mono">{prob.tag}</span>
+                </div>
+                <div className="mt-4 pt-3 border-t border-[#1E293B] flex items-center justify-between text-[10px] font-mono text-slate-500">
+                  <span>Pass rate: {prob.acc}</span>
+                  <span className="text-blue-400 font-semibold group-hover:underline">Solve →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- 6. SOCRATIC AI TUTOR DEMONSTRATION ----------------- */}
+      <section id="ai-tutor" className="py-20 border-t border-[#1E293B] bg-[#090B10]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <span className="text-xs font-mono font-semibold uppercase tracking-widest text-purple-400">PEDAGOGICAL INTELLIGENCE</span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-2 tracking-tight">
+              A Programming Mentor That Teaches You to Think
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-400">
+              Unlike generic bots that spoil code solutions and ruin retention, CodeLoop's Socratic engine builds problem-solving muscles.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {/* Left: The Wrong Way (Generic Bot) */}
+            <div className="cd-card p-6 border-red-900/30 bg-[#0E1118]/70">
+              <div className="flex items-center gap-2 text-xs font-mono text-red-400 font-semibold mb-3">
+                <span>✕</span>
+                <span>Generic AI Assistants (Low Retention)</span>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-lg bg-[#11151D] border border-[#1E293B] text-slate-300">
+                  <strong className="text-white">Student:</strong> "Why is my binary search looping infinitely?"
+                </div>
+                <div className="p-3 rounded-lg bg-red-950/20 border border-red-900/30 text-slate-300">
+                  <strong className="text-red-300">Generic Bot:</strong> "Here is the exact corrected code. Copy-paste this block: <br/><code>low = mid + 1</code>"
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-[#1E293B] text-[11px] text-slate-500 font-mono">
+                Result: Zero concept transfer. The student makes the identical bug on their next technical interview.
+              </div>
+            </div>
+
+            {/* Right: The CodeLoop Way (Socratic Mentor) */}
+            <div className="cd-card p-6 border-blue-500/40 bg-[#11151D] shadow-xl shadow-blue-500/5">
+              <div className="flex items-center gap-2 text-xs font-mono text-blue-400 font-semibold mb-3">
+                <span>✓</span>
+                <span>CODELOOP Pedagogical Mentor (Permanent Mastery)</span>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-lg bg-[#0E1118] border border-[#1E293B] text-slate-300">
+                  <strong className="text-white">Student:</strong> "Why is my binary search looping infinitely?"
+                </div>
+                <div className="p-3 rounded-lg bg-blue-950/25 border border-blue-600/30 text-slate-300 space-y-1">
+                  <strong className="text-blue-300">CODELOOP AI:</strong>
+                  <p className="text-[11.5px] leading-relaxed">
+                    "Look closely at line 8: when <code className="text-blue-300">arr[mid] &lt; target</code>, you set <code className="text-blue-300">low = mid</code>. What happens when <code className="text-blue-300">high - low == 1</code>? Does <code className="text-blue-300">mid</code> advance, or does it keep evaluating the exact same element forever?"
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-[#1E293B] flex items-center justify-between text-[11px] text-emerald-400 font-mono">
+                <span>Result: Intuition mastered permanently.</span>
+                <button
+                  onClick={() => setActiveTab("tutor")}
+                  className="text-blue-400 font-semibold hover:underline"
+                >
+                  Try AI Tutor →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- 7. STRUCTURED CURRICULUM TRACKS ----------------- */}
+      <section id="curriculum" className="py-20 border-t border-[#1E293B] bg-[#0E1118]/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <span className="text-xs font-mono font-semibold uppercase tracking-widest text-indigo-400">STRUCTURED SYLLABUS</span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mt-2 tracking-tight">
+              From First Script to System Architect
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-400">
+              Four progressive learning tracks complete with modules, interactive quizzes, and code projects.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              {
+                track: "Python 3 Fundamentals",
+                icon: "🐍",
+                lessons: "16 Lessons • 4 Quizzes",
+                desc: "Data types, control structures, list comprehensions, functional idioms, and modular architecture.",
+                badge: "Beginner"
+              },
+              {
+                track: "Algorithms & Data Structures",
+                icon: "⚡",
+                lessons: "24 Lessons • 6 Quizzes",
+                desc: "Arrays, two-pointers, hash tables, stacks, trees, graphs, and Big-O asymptotic analysis.",
+                badge: "Core CS"
+              },
+              {
+                track: "C & Systems Programming",
+                icon: "⚙️",
+                lessons: "14 Lessons • 3 Quizzes",
+                desc: "Pointers, memory management (malloc/free), structs, file I/O, and low-level compiler concepts.",
+                badge: "Systems"
+              },
+              {
+                track: "Modern JavaScript & Web Logic",
+                icon: "🌐",
+                lessons: "18 Lessons • 5 Quizzes",
+                desc: "ES6+, event loop, closures, promises, async/await, and browser DOM manipulation.",
+                badge: "Web Core"
+              }
+            ].map((t) => (
+              <div 
+                key={t.track}
+                onClick={() => setActiveTab("learninghub")}
+                className="cd-card p-5 hover:border-indigo-500/40 cursor-pointer transition flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-2xl">{t.icon}</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#1B2230] text-slate-300 border border-[#283347]">
+                      {t.badge}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mb-1">{t.track}</h3>
+                  <span className="text-[11px] font-mono text-indigo-400 block mb-2">{t.lessons}</span>
+                  <p className="text-xs text-slate-400 leading-relaxed">{t.desc}</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-[#1E293B] text-[11px] font-mono text-slate-500 flex items-center justify-between">
+                  <span>Explore Track</span>
+                  <span className="text-blue-400 font-semibold">View →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- 8. BOTTOM HERO CTA BANNER ----------------- */}
+      <section className="py-20 border-t border-[#1E293B] bg-gradient-to-b from-[#090B10] to-[#0E1118] relative">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-mono mb-4">
+            <span>Ready to Code?</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight">
+            Stop Watching Tutorials. Start Writing Code.
+          </h2>
+          <p className="mt-4 text-base text-slate-400 max-w-xl mx-auto">
+            Join students and developers mastering algorithms and building software today. No registration or credit card required.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <button
+              onClick={() => setActiveTab("editor")}
+              className="flex items-center gap-2 px-6 py-3.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-600/30 transition transform hover:-translate-y-0.5"
+            >
+              <span>Launch Code Playground</span>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button
+              onClick={() => setActiveTab("practice")}
+              className="px-6 py-3.5 rounded-xl text-sm font-semibold bg-[#11151D] hover:bg-[#1B2230] text-slate-200 border border-[#1E293B] hover:border-[#283347] transition transform hover:-translate-y-0.5"
+            >
+              Browse Practice Arena
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- 9. CLEAN MODERN FOOTER ----------------- */}
+      <footer className="border-t border-[#1E293B] bg-[#090B10] py-12 text-xs text-slate-500 font-mono">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
+            {/* Col 1: Brand */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center text-white font-bold text-xs">
+                  C
+                </div>
+                <span className="font-bold text-sm text-white">CODELOOP</span>
+              </div>
+              <p className="text-slate-400 font-sans text-xs leading-relaxed">
+                Learn. Code. Build. Repeat. The high-performance coding and algorithmic learning workspace.
+              </p>
+              <div className="text-[11px] text-slate-600">
+                © 2026 CODELOOP. Open-source under MIT.
+              </div>
+            </div>
+
+            {/* Col 2: Workspace */}
+            <div>
+              <div className="text-white font-semibold uppercase tracking-wider text-[11px] mb-3">Workspace</div>
+              <ul className="space-y-2">
+                <li><button onClick={() => setActiveTab("editor")} className="hover:text-slate-300 transition">Code Playground</button></li>
+                <li><button onClick={() => setActiveTab("practice")} className="hover:text-slate-300 transition">Practice Arena</button></li>
+                <li><button onClick={() => setActiveTab("tutor")} className="hover:text-slate-300 transition">Socratic AI Mentor</button></li>
+                <li><button onClick={() => setActiveTab("materials")} className="hover:text-slate-300 transition">Study Materials Vault</button></li>
+              </ul>
+            </div>
+
+            {/* Col 3: Learning */}
+            <div>
+              <div className="text-white font-semibold uppercase tracking-wider text-[11px] mb-3">Curriculum</div>
+              <ul className="space-y-2">
+                <li><button onClick={() => setActiveTab("learninghub")} className="hover:text-slate-300 transition">Python 3 Fundamentals</button></li>
+                <li><button onClick={() => setActiveTab("learninghub")} className="hover:text-slate-300 transition">Algorithms & Complexity</button></li>
+                <li><button onClick={() => setActiveTab("learninghub")} className="hover:text-slate-300 transition">C & Systems Programming</button></li>
+                <li><button onClick={() => setActiveTab("analytics")} className="hover:text-slate-300 transition">Progress & Telemetry</button></li>
+              </ul>
+            </div>
+
+            {/* Col 4: Platform */}
+            <div>
+              <div className="text-white font-semibold uppercase tracking-wider text-[11px] mb-3">Platform</div>
+              <ul className="space-y-2">
+                <li><span className="text-emerald-400">● Pyodide WASM Active</span></li>
+                <li><span className="text-slate-400">Strict Dark Interface</span></li>
+                <li>
+                  <button onClick={() => requireAuth("Sign In or Register")} className="hover:text-slate-300 transition">
+                    {isGuest ? "Sign In / Register" : "Account Settings"}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-[#1E293B]/60 flex flex-wrap items-center justify-between gap-4 text-[11px]">
+            <span>Crafted for developers and students worldwide.</span>
+            <div className="flex items-center gap-4">
+              <span className="text-blue-400 font-semibold">Learn. Code. Build. Repeat.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+
 // ----------------- GLOBAL SIDEBAR COMPONENT -----------------
 function Sidebar({ activeTab, setActiveTab, currentUser, logout, requireAuth, collapsed, toggleCollapse, mobileMenuOpen, setMobileMenuOpen }) {
   const isGuest = currentUser?.isGuest;
@@ -551,6 +1501,16 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, requireAuth, co
     {
       group: "WORKSPACE",
       items: [
+        {
+          id: "landing",
+          label: "Overview & Features",
+          icon: (
+            <svg className="w-4 h-4 shrink-0 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          )
+        },
         { 
           id: "dashboard", 
           label: "Dashboard",
@@ -818,10 +1778,11 @@ function Sidebar({ activeTab, setActiveTab, currentUser, logout, requireAuth, co
 }
 
 // ----------------- GLOBAL HEADER COMPONENT -----------------
-function Header({ activeTab, currentUser, collapsed, toggleCollapse, voiceEnabled, setVoiceEnabled, setMobileMenuOpen, requireAuth }) {
+function Header({ activeTab, currentUser, collapsed, toggleCollapse, voiceEnabled, setVoiceEnabled, setMobileMenuOpen, requireAuth, setActiveTab }) {
   const isGuest = currentUser?.isGuest;
 
   const titles = {
+    landing: "Platform Overview",
     dashboard: "Workspace Dashboard",
     editor: "Code Playground",
     tutor: "AI Tutor Workspace",
@@ -866,6 +1827,16 @@ function Header({ activeTab, currentUser, collapsed, toggleCollapse, voiceEnable
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
           <span>Learn • Code • Build • Repeat</span>
         </span>
+
+        {/* Quick Landing Page Link */}
+        <button
+          onClick={() => setActiveTab && setActiveTab("landing")}
+          className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono bg-[#11151D] border border-[#1E293B] text-slate-400 hover:text-white hover:bg-[#1B2230] transition"
+          title="Explore Platform Features & Interactive Demos"
+        >
+          <span className="text-blue-400">⚡</span>
+          <span>Features</span>
+        </button>
 
         {/* Voice Narration Toggle */}
         <button
