@@ -198,11 +198,54 @@ function MonacoEditor({ code, language, onChange, height = "460px" }) {
   return <div ref={containerRef} style={{ height, width: "100%" }} className="rounded-b-lg overflow-hidden" />;
 }
 
+
+// ----------------- CLIENT ROUTING HELPERS -----------------
+function getRouteFromLocation() {
+  if (typeof window === "undefined") return "landing";
+  
+  // 1. Check query parameter (?tab=...)
+  const urlParams = new URLSearchParams(window.location.search);
+  const tabParam = urlParams.get("tab");
+  if (tabParam) return tabParam;
+
+  // 2. Check pathname
+  const path = (window.location.pathname || "/").toLowerCase().replace(/\/$/, "");
+  if (!path || path === "" || path === "/index.html") return "landing";
+  if (path === "/login") return "login";
+  if (path === "/signup" || path === "/register") return "signup";
+  if (path === "/editor" || path === "/playground") return "editor";
+  if (path === "/practice") return "practice";
+  if (path === "/tutor") return "tutor";
+  if (path === "/dashboard") return "dashboard";
+  if (path === "/learninghub") return "learninghub";
+  if (path === "/materials") return "materials";
+  if (path === "/analytics") return "analytics";
+  if (path === "/profile") return "profile";
+  if (path === "/settings") return "settings";
+
+  return "landing";
+}
+
+function getPathForTab(tab) {
+  if (tab === "landing") return "/";
+  if (tab === "login") return "/login";
+  if (tab === "signup") return "/signup";
+  if (tab === "editor") return "/editor";
+  if (tab === "practice") return "/practice";
+  if (tab === "tutor") return "/tutor";
+  if (tab === "dashboard") return "/dashboard";
+  if (tab === "learninghub") return "/learninghub";
+  if (tab === "materials") return "/materials";
+  if (tab === "analytics") return "/analytics";
+  if (tab === "profile") return "/profile";
+  if (tab === "settings") return "/settings";
+  return `/${tab}`;
+}
+
 // ----------------- ROOT COMPONENT (APP) -----------------
 function App() {
-  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-  const initialToken = (urlParams && urlParams.get("token")) || localStorage.getItem("codeloop_token") || "";
-  const initialTab = (urlParams && urlParams.get("tab")) || (initialToken ? "dashboard" : "landing");
+  const initialToken = (typeof localStorage !== "undefined" ? localStorage.getItem("codeloop_token") : "") || "";
+  const initialTab = getRouteFromLocation();
 
   // Guest-friendly user defaults: No forced auth wall on entry
   const GUEST_USER = {
@@ -223,10 +266,31 @@ function App() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Progressive Contextual Auth Modal State
+  // Progressive Contextual Auth & Destination State
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalReason, setAuthModalReason] = useState("");
   const [pendingPostAuthAction, setPendingPostAuthAction] = useState(null);
+  const [returnDestination, setReturnDestination] = useState(null);
+
+  // HTML5 History Routing
+  const navigateTo = (newTab, push = true) => {
+    setActiveTab(newTab);
+    if (push && typeof window !== "undefined" && window.history && window.history.pushState) {
+      const targetPath = getPathForTab(newTab);
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ tab: newTab }, "", targetPath);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getRouteFromLocation();
+      setActiveTab(route);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   // Cross-feature deep integrations
   const [editorInitialCode, setEditorInitialCode] = useState(null);
@@ -269,24 +333,25 @@ function App() {
   const openInEditor = (code, language = "python") => {
     setEditorInitialCode(code);
     setEditorInitialLanguage(language);
-    setActiveTab("editor");
+    navigateTo("editor");
     showToast("Code loaded into Playground", "info");
   };
 
   const askTutor = (prompt, mode = "explain") => {
     setTutorInitialPrompt({ prompt, mode, timestamp: Date.now() });
-    setActiveTab("tutor");
+    navigateTo("tutor");
     showToast("Query sent to AI Tutor", "info");
   };
 
-  // Progressive Authentication Trigger
-  const requireAuth = (reason = "Enjoying CODELOOP? Create a free account to save your work and track your learning journey.", onSuccessAction = null) => {
+  // Progressive Authentication Trigger with Destination Preservation
+  const requireAuth = (reason = "Enjoying CODELOOP? Create a free account to save your work and track your learning journey.", onSuccessAction = null, destination = null) => {
     if (token && currentUser && !currentUser.isGuest) {
       if (onSuccessAction) onSuccessAction();
       return true;
     }
     setAuthModalReason(reason);
     setPendingPostAuthAction(() => onSuccessAction);
+    setReturnDestination(destination || activeTab);
     setAuthModalOpen(true);
     return false;
   };
@@ -307,12 +372,21 @@ function App() {
         setPendingPostAuthAction(null);
       }, 300);
     }
+
+    // Return to the intended destination or stay on current view
+    if (returnDestination && returnDestination !== "login" && returnDestination !== "signup") {
+      navigateTo(returnDestination);
+      setReturnDestination(null);
+    } else if (activeTab === "login" || activeTab === "signup") {
+      navigateTo("dashboard");
+    }
   };
 
   const logout = () => {
     localStorage.removeItem("codeloop_token");
     setToken("");
     setCurrentUser(GUEST_USER);
+    navigateTo("landing");
     showToast("Signed out. Switched to Guest mode.", "info");
   };
 
@@ -342,11 +416,18 @@ function App() {
         />
       )}
 
-      {/* Full-Bleed Modern Landing Page View */}
-      {activeTab === "landing" ? (
+      {/* Explicit /login or /signup Dedicated Auth Page */}
+      {activeTab === "login" || activeTab === "signup" ? (
+        <AuthPageView
+          initialMode={activeTab === "signup" ? "register" : "login"}
+          onSuccess={handleAuthSuccess}
+          onContinueGuest={() => navigateTo(returnDestination || "landing")}
+          returnDestination={returnDestination}
+        />
+      ) : activeTab === "landing" ? (
         <LandingPageView
           currentUser={currentUser}
-          setActiveTab={setActiveTab}
+          setActiveTab={navigateTo}
           openInEditor={openInEditor}
           askTutor={askTutor}
           requireAuth={requireAuth}
@@ -357,7 +438,7 @@ function App() {
           {/* Global Collapsible Sidebar */}
           <Sidebar 
             activeTab={activeTab} 
-            setActiveTab={setActiveTab} 
+            setActiveTab={navigateTo} 
             currentUser={currentUser} 
             logout={logout}
             requireAuth={requireAuth}
@@ -378,11 +459,11 @@ function App() {
           setVoiceEnabled={setVoiceEnabled}
           setMobileMenuOpen={setMobileMenuOpen}
           requireAuth={requireAuth}
-          setActiveTab={setActiveTab}
+          setActiveTab={navigateTo}
         />
 
         <main className={`flex-1 w-full ${activeTab === "tutor" ? "p-0 h-[calc(100vh-3.5rem)] overflow-hidden" : "p-4 md:p-6 max-w-7xl mx-auto"}`}>
-          {activeTab === "dashboard" && <DashboardView currentUser={currentUser} setActiveTab={setActiveTab} showToast={showToast} openInEditor={openInEditor} askTutor={askTutor} requireAuth={requireAuth} />}
+          {activeTab === "dashboard" && <DashboardView currentUser={currentUser} setActiveTab={navigateTo} showToast={showToast} openInEditor={openInEditor} askTutor={askTutor} requireAuth={requireAuth} />}
           {activeTab === "editor" && <CodeEditorView currentUser={currentUser} showToast={showToast} initialCode={editorInitialCode} initialLanguage={editorInitialLanguage} askTutor={askTutor} requireAuth={requireAuth} />}
           {activeTab === "tutor" && <AITutorView currentUser={currentUser} voiceEnabled={voiceEnabled} showToast={showToast} openInEditor={openInEditor} tutorInitialPrompt={tutorInitialPrompt} onClearInitialPrompt={() => setTutorInitialPrompt(null)} />}
           {activeTab === "practice" && <PracticeZoneView currentUser={currentUser} showToast={showToast} askTutor={askTutor} requireAuth={requireAuth} />}
@@ -553,6 +634,213 @@ function AuthModal({ reason, onSuccess, onClose }) {
             Dismiss and Continue as Guest
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+// ----------------- DEDICATED AUTH PAGE VIEW (/login, /signup) -----------------
+function AuthPageView({ initialMode = "login", onSuccess, onContinueGuest, returnDestination }) {
+  const [mode, setMode] = useState(initialMode);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("Beginner");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setMode(initialMode);
+    setError("");
+  }, [initialMode]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      if (mode === "login") {
+        const res = await apiRequest("/api/auth/login", "POST", { email, password });
+        onSuccess(res.token, res.user);
+      } else {
+        const res = await apiRequest("/api/auth/register", "POST", {
+          name,
+          email,
+          password,
+          experience_level: experienceLevel,
+          preferred_languages: ["Python"],
+          learning_goals: "Master programming fundamentals"
+        });
+        onSuccess(res.token, res.user);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setError("");
+    if (typeof window !== "undefined" && window.history && window.history.pushState) {
+      window.history.pushState({ tab: newMode }, "", newMode === "register" ? "/signup" : "/login");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#090B10] text-[#F1F5F9] font-sans flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden">
+      {/* Background glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-600/10 blur-[120px] pointer-events-none rounded-full" />
+
+      {/* Top Header */}
+      <div className="max-w-6xl w-full mx-auto flex items-center justify-between z-10">
+        <div 
+          onClick={onContinueGuest}
+          className="flex items-center gap-2.5 cursor-pointer"
+        >
+          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-md shadow-blue-500/20">
+            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </div>
+          <span className="font-bold text-sm tracking-tight text-white">CODELOOP</span>
+        </div>
+
+        <button
+          onClick={onContinueGuest}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-[#1B2230] border border-transparent hover:border-[#283347] transition"
+        >
+          <span>← Back to Website</span>
+        </button>
+      </div>
+
+      {/* Centered Auth Card */}
+      <div className="w-full max-w-sm mx-auto my-auto z-10 py-8">
+        <div className="cd-card border border-[#1E293B] bg-[#11151D] p-6 sm:p-8 rounded-2xl shadow-2xl space-y-5">
+          {/* Header */}
+          <div className="text-center space-y-1">
+            <h1 className="text-xl font-extrabold text-white tracking-tight">
+              {mode === "register" ? "Create Free Account" : "Sign In to CodeLoop"}
+            </h1>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {mode === "register" 
+                ? "Save your programs, track algorithmic streaks, and sync across devices." 
+                : "Welcome back! Enter your credentials to access your workspace."}
+            </p>
+          </div>
+
+          {/* Mode Tabs */}
+          <div className="grid grid-cols-2 p-1 rounded-lg bg-[#0E1118] border border-[#1E293B] text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className={`py-1.5 rounded-md transition ${mode === "login" ? "bg-[#1B2230] text-white shadow font-semibold" : "text-slate-400 hover:text-white"}`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("register")}
+              className={`py-1.5 rounded-md transition ${mode === "register" ? "bg-[#1B2230] text-white shadow font-semibold" : "text-slate-400 hover:text-white"}`}
+            >
+              Register
+            </button>
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-xs">
+              {error}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+            {mode === "register" && (
+              <div>
+                <label className="block font-medium text-slate-300 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Alex Mercer"
+                  className="w-full cd-input rounded-lg px-3 py-2 focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block font-medium text-slate-300 mb-1">Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="alex@example.com"
+                className="w-full cd-input rounded-lg px-3 py-2 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-medium text-slate-300 mb-1">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full cd-input rounded-lg px-3 py-2 focus:border-blue-500"
+              />
+            </div>
+
+            {mode === "register" && (
+              <div>
+                <label className="block font-medium text-slate-300 mb-1">Experience Level</label>
+                <select
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value)}
+                  className="w-full cd-input rounded-lg px-3 py-2 font-mono focus:border-blue-500"
+                >
+                  <option value="Beginner">Beginner (Learning to code)</option>
+                  <option value="Intermediate">Intermediate (Know syntax & algorithms)</option>
+                  <option value="Advanced">Advanced (Systems & production software)</option>
+                </select>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/25 transition active:scale-[0.99] disabled:opacity-50 mt-2"
+            >
+              {loading ? "Processing..." : mode === "register" ? "Create Free Account" : "Sign In to Workspace"}
+            </button>
+          </form>
+
+          {/* Continue as Guest option */}
+          <div className="pt-3 border-t border-[#1E293B] text-center space-y-2 text-xs">
+            <button
+              type="button"
+              onClick={onContinueGuest}
+              className="w-full py-2 rounded-lg bg-[#0E1118] hover:bg-[#1B2230] text-slate-300 border border-[#1E293B] hover:border-[#283347] transition font-medium"
+            >
+              Continue as Guest (No Account Required)
+            </button>
+            <p className="text-[11px] text-slate-500 font-mono">
+              You can write code, run Python WASM, and solve problems freely as a guest.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Footer */}
+      <div className="max-w-6xl w-full mx-auto text-center text-xs font-mono text-slate-600 z-10">
+        Learn • Code • Build • Repeat. © 2026 CODELOOP.
       </div>
     </div>
   );

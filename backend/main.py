@@ -1153,8 +1153,21 @@ def save_user_gemini_key(req: SaveKeyRequest, user_id: str = Depends(get_current
         USER_CUSTOM_KEYS.pop(user_id, None)
     return {"message": "AI configuration updated successfully."}
 
-# ----------------- FRONTEND SPA ROOT -----------------
-@app.get("/")
+# ----------------- FRONTEND SPA ROOT & ROUTES -----------------
+@app.get("/", include_in_schema=False)
+@app.get("/login", include_in_schema=False)
+@app.get("/signup", include_in_schema=False)
+@app.get("/register", include_in_schema=False)
+@app.get("/editor", include_in_schema=False)
+@app.get("/playground", include_in_schema=False)
+@app.get("/practice", include_in_schema=False)
+@app.get("/tutor", include_in_schema=False)
+@app.get("/dashboard", include_in_schema=False)
+@app.get("/learninghub", include_in_schema=False)
+@app.get("/materials", include_in_schema=False)
+@app.get("/analytics", include_in_schema=False)
+@app.get("/profile", include_in_schema=False)
+@app.get("/settings", include_in_schema=False)
 def serve_index():
     index_file = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_file):
@@ -1163,6 +1176,16 @@ def serve_index():
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Catch-all route for SPA navigation (excluding /api/ and /static/ which should 404 if route doesn't exist)
+@app.get("/{catchall_path:path}", include_in_schema=False)
+def serve_catchall(catchall_path: str):
+    if catchall_path.startswith("api/") or catchall_path.startswith("static/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    index_file = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return JSONResponse({"status": "CODELOOP backend is active and ready."})
 
 if __name__ == "__main__":
     import uvicorn
